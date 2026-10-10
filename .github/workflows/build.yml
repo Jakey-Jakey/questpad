@@ -1,0 +1,32 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --target thumbv7em-none-eabihf --component llvm-tools
+          rustup default stable
+      - name: Host tool self-tests
+        run: python3 host/mapping.py
+      - name: Build firmware and package
+        run: tools/package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quest-touch-dongle
+          path: dist/*.zip
+      - name: Release (tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip firmware/target/quest-dongle.bin --generate-notes
+    permissions:
+      contents: write

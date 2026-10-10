@@ -16,3 +16,4 @@ research/*
 !research/ghidra/
 research/ghidra/*
 !research/ghidra/scripts/
+dist/
