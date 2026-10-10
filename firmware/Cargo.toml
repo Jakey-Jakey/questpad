@@ -1,0 +1,30 @@
+[package]
+name = "quest-dongle"
+version = "0.7.0"
+license = "MIT OR Apache-2.0"
+description = "nRF52840 dongle that hosts Quest 1 Touch controllers and presents them as a USB gamepad"
+edition = "2021"
+
+[dependencies]
+embassy-nrf = { version = "0.11.0", features = ["nrf52840", "time-driver-rtc1", "gpiote", "rt"] }
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt"] }
+embassy-time = "0.5.1"
+embassy-sync = "0.8.0"
+embassy-usb = "0.6.0"
+embassy-futures = "*"
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7.7"
+static_cell = "2"
+heapless = "0.8"
+critical-section = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+debug = 2
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = "s"
+panic = "abort"
