@@ -11,7 +11,7 @@ Loose ideas for what QuestPad could do next. The protocol and register map are i
   own rotation, not position, so "push one hand forward, pull the other back" can't be measured directly (double-
   integrating the accelerometer drifts within a second); it shows up only as the yaw it causes.
 - **Two-hand gestures**: both controllers' orientations together (e.g. both pitched up = brace / shield, mirrored
-  roll = lean) — orientation is reliable, relative position is not (needs camera / hand-tracking, see IR + Steam Frame).
+  roll = lean). Orientation is reliable, relative position is not (needs camera / hand-tracking, see IR + Steam Frame).
 - **Gestures**: shake / flick / punch detection mapped to buttons (e.g. flick to reload).
 - **Find my controller**: buzz a controller from the other one or from the Mac; or buzz whichever was just jostled
   (motion wakes them anyway).

@@ -2,7 +2,7 @@
 
 # QuestPad
 
-**Use Meta Quest Touch controllers as a regular gamepad — no headset, no phone, no drivers.**
+**Use Meta Quest Touch controllers as a regular gamepad. No headset, no phone, no drivers.**
 
 [![build](https://github.com/Jakey-Jakey/questpad/actions/workflows/build.yml/badge.svg)](https://github.com/Jakey-Jakey/questpad/actions/workflows/build.yml)
 [![license](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue)](#license)
@@ -13,7 +13,7 @@
 
 Quest controllers only talk to a Quest headset, over a private 2.4 GHz radio link. QuestPad teaches a cheap
 **Nordic nRF52840 Dongle** (about $11) to speak that protocol, so the controllers connect to it as if it were a
-headset. Your computer then sees one combined controller — sticks, triggers, buttons, rumble, and in DS4 mode the
+headset. Your computer then sees one combined controller: sticks, triggers, buttons, rumble, and in DS4 mode the
 gyro too. As far as we know it is the first way to use Touch controllers without a headset.
 
 ## Features
@@ -33,7 +33,7 @@ gyro too. As far as we know it is the first way to use Touch controllers without
 | **Quest 2** Touch | ❔ untested | Probably a close relative of the same protocol, but newer controllers appear to use a key-exchange based pairing that Quest 1 controllers don't, so pairing would need that added. |
 | **Quest 3 / 3S** Touch Plus | ❔ untested | Nothing known yet. |
 
-Contributions that make QuestPad work with more controllers are very welcome — see
+Contributions that make QuestPad work with more controllers are very welcome. See
 [Supporting a new controller](#supporting-a-new-controller).
 
 | computer | status |
@@ -58,7 +58,7 @@ Contributions that make QuestPad work with more controllers are very welcome —
 4. **Pair each controller**: tap the dongle's button (or click **Pair a controller**), then hold
    **Oculus + Y** (left) or **Oculus + B** (right) until the controller's light blinks. The dongle flashes green and
    the controller buzzes.
-5. **Pick a mode** in the panel — **DS4** is best for Steam — and play. From now on the dongle works on its own.
+5. **Pick a mode** in the panel (**DS4** is best for Steam) and play. From now on the dongle works on its own.
 
 Click **Back up pairing…** once and keep the file somewhere safe (and private: it's your controllers' key).
 Reinstalling the firmware through the RESET button can erase the pairing, and the backup saves re-pairing.
@@ -71,7 +71,7 @@ trigger → RT, grip → RB, Oculus → Guide, stick click → RS.
 | mode | LED | use it for |
 |---|---|---|
 | Generic gamepad | green | anything that takes a USB gamepad; Steam asks you to map the buttons once |
-| DS4 (PlayStation 4) | blue | **Steam**, SDL games, emulators, macOS, Linux — no setup, gyro, rumble, battery |
+| DS4 (PlayStation 4) | blue | **Steam**, SDL games, emulators, macOS, Linux: no setup, gyro, rumble, battery |
 | XInput (Xbox 360) | purple | Windows games that only support Xbox controllers |
 
 Switch in the panel or by holding the dongle's button for 3 s (it steps through the modes in that order).
@@ -130,7 +130,7 @@ tools/package.sh             # build the release zip into dist/
 | `host/dm.py`, `host/sniff_adv.py` | pairing-mode tools |
 | `research/` | the analysis scripts used to work out the protocol |
 
-**How it works** — the radio protocol, pairing, encryption, controller data and the dongle internals are written up
+**How it works:** the radio protocol, pairing, encryption, controller data and the dongle internals are written up
 in **[PROTOCOL.md](PROTOCOL.md)**. Ideas for the future are in [IDEAS.md](IDEAS.md).
 
 ## Supporting a new controller
@@ -139,10 +139,10 @@ to look for, are in [PROTOCOL.md → Adding another controller](PROTOCOL.md#addi
 with partial findings is useful too.
 
 ## Acknowledgements
-- [GP2040-CE](https://github.com/OpenStickCommunity/GP2040-CE) — the DS4 report descriptor and Xbox 360 USB layout
+- [GP2040-CE](https://github.com/OpenStickCommunity/GP2040-CE): the DS4 report descriptor and Xbox 360 USB layout
   used by the DS4 and XInput modes.
-- [embassy](https://embassy.dev) — the async Rust framework the firmware runs on.
-- [pySerial](https://github.com/pyserial/pyserial) — bundled so the control panel needs only Python.
+- [embassy](https://embassy.dev): the async Rust framework the firmware runs on.
+- [pySerial](https://github.com/pyserial/pyserial): bundled so the control panel needs only Python.
 
 ## License
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT), at your option.

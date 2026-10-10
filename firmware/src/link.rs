@@ -32,7 +32,7 @@ const CCM_INTENSET: u32 = CCM + 0x304;
 const CCM_INTENCLR: u32 = CCM + 0x308;
 const CCM_INT_ENDCRYPT: u32 = 1 << 1;
 const CCM_INT_ERROR: u32 = 1 << 2;
-/// Decrypt, 2 Mbit, extended (8-bit) length — the controller encrypts with 0x01010000.
+/// Decrypt, 2 Mbit, extended (8-bit) length; the controller encrypts with 0x01010000.
 const CCM_MODE_DECRYPT: u32 = 0x0101_0001;
 
 const SHORT_END_START: u32 = 1 << 5;

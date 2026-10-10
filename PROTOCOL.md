@@ -1,7 +1,7 @@
 # How QuestPad works
 
 This is a guide to the Quest 1 Touch controllers' radio protocol as QuestPad implements it, and to the dongle
-firmware — enough to understand the code, debug it, or add support for another controller. Everything here was
+firmware: enough to understand the code, debug it, or add support for another controller. Everything here was
 verified on hardware (controller firmware 1.17.2, bootloader 1.13.0). Multi-byte values are little-endian unless
 noted. Meta's internal name for the protocol is **Pulsar**.
 
@@ -83,7 +83,7 @@ The dongle plays the headset's role. Time is divided into **2000 µs frames**:
 **Addressing.** Base address = `network_id`. The beacon uses prefix `0xF0`; a controller in slot *s* uses prefix
 *s* + 1, so the host listens on logical addresses 1..5 and `RXMATCH − 1` is the slot. Slot 0 is shared, for joining.
 
-**Channels.** 37 channels — the Bluetooth LE data-channel set: index 0..36 → `FREQUENCY` 4, 6, …, 24, 28, …, 78
+**Channels.** 37 channels, the Bluetooth LE data-channel set: index 0..36 → `FREQUENCY` 4, 6, …, 24, 28, …, 78
 (2404–2478 MHz, skipping 2426). Each frame the host hops with BLE channel-selection algorithm #1:
 `unmapped = (current + hop) % 37` (remapped through the list of used channels if masked), with
 `hop = (network_id & 0xFF) % 11 + 5`. A controller looking for its host listens on channel indices 0, 17 and 36 in
@@ -95,8 +95,8 @@ turn; once it hears a beacon it follows the hopping, and gives up after 24 misse
 |---|---|
 | 0..5 | 3 flag bits, then the 37-bit channel map shifted left by 3 |
 | 5 | this frame's (unmapped) channel index |
-| 6..8 | session id — any value, part of the encryption IV |
-| 8..14 | 48-bit timestamp in µs — part of the IV; must advance by exactly 2000 per frame |
+| 6..8 | session id (any value; part of the encryption IV) |
+| 8..14 | 48-bit timestamp in µs (part of the IV; must advance by exactly 2000 per frame) |
 | 14.. | control data, below |
 
 **Control data** in the beacon is normally `[downlink mask][ack mask]`, where bit *s* of the ack mask means "I got
@@ -108,8 +108,8 @@ rejects). The controller then transmits in its own slot every frame.
 
 **Encryption.** Controller packets are AES-CCM encrypted (the nRF CCM peripheral in BLE-style, extended-length,
 2 Mbit mode; 4-byte MIC) with the pairing key, packet counter 0, direction 0, and an 8-byte IV made of the beacon
-timestamp (48 bits) and the session id (16 bits). The nRF CCM decrypts at roughly radio speed — about 310 µs for a
-full packet — so the firmware queues packets and finishes them in the CCM interrupt rather than waiting.
+timestamp (48 bits) and the session id (16 bits). The nRF CCM decrypts at roughly radio speed (about 310 µs for a
+full packet), so the firmware queues packets and finishes them in the CCM interrupt rather than waiting.
 
 ## Controller data
 Each decrypted controller packet looks like:
@@ -127,7 +127,7 @@ Each **entry** is `[id:5 | len_lo:3 << 5] [len_hi:4 | seq:3 << 4 | last << 7] [d
 |---|---|
 | 0 | battery % |
 | 1 | IMU, 18 B: timestamp (48-bit µs), accel x y z (i16, ~1024 per g), gyro x y z (i16, ~8.2 per °/s); every 2 ms |
-| 2 | thumbstick x, y (i16; +x right, +y up; exactly 0, 0 at rest — already calibrated) |
+| 2 | thumbstick x, y (i16; +x right, +y up; exactly 0, 0 at rest, already calibrated) |
 | 3 | trigger, grip: two 12-bit values packed in 3 bytes, inverted (4095 = released, 0 = fully squeezed) |
 | 4 | buttons: bit 0 X / A, bit 1 Y / B, bit 2 stick click, bit 3 Menu / Oculus (bit 4 is always set) |
 | 5 | capacitive touch: 0x01 X / A, 0x02 Y / B, 0x04 stick, other bits not yet mapped |
@@ -159,7 +159,7 @@ bit; flags bit 5 means error.
 | `0x24`, `0x25` | read | app / bootloader version |
 | `0x2F` | read | battery: f32 %, then the cell voltage (u16, mV) |
 | `0x31`, `0x32` | read | IMU part number and configuration |
-| `0x05` | write | **power off** — wakes on motion or a button |
+| `0x05` | write | **power off** (wakes on motion or a button) |
 | `0x06` | write | `1` standby (packets almost stop), `0` active |
 | `0x97` | write | **vibration strength**, 1 byte; stays on until set back to 0 |
 | `0x28` | read / write | IR LED timing: period (33333 or 40000 µs) and pulse width (1–99 µs) |
@@ -201,4 +201,4 @@ stops responding for 8 s.
 3. **Pair and join.** `host/dm.py pair`, then `host/link.py --raw`: does it join, with what type value?
 4. **Map its data.** `host/link.py --changes` while you press, squeeze and move things; compare with
    [Controller data](#controller-data).
-5. **Share it.** Open a pull request or an issue with what you found — partial results help.
+5. **Share it.** Open a pull request or an issue with what you found. Partial results help.
