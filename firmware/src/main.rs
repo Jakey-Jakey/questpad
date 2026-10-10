@@ -36,7 +36,7 @@ bind_interrupts!(struct Irqs {
 
 type UsbDriver = Driver<'static, HardwareVbusDetect>;
 
-const VERSION: &[u8] = b"questpad 1.0.0";
+const VERSION: &[u8] = b"questpad 1.0.1";
 
 // Host -> dongle commands.
 const CMD_POKE: u8 = 0x01; // addr u32, val u32
@@ -507,7 +507,7 @@ async fn main(spawner: Spawner) {
     let (vid, pid, product) = match mode {
         settings::Mode::Ds4 => (ds4::VID, ds4::PID, "QuestPad (DS4 mode)"),
         settings::Mode::XInput => (xinput::VID, xinput::PID, "QuestPad (XInput mode)"),
-        settings::Mode::Hid => (0x1209, 0x0001, "QuestPad"),
+        settings::Mode::Hid => (0x1209, 0x5151, "QuestPad"),
     };
     let mut ucfg = embassy_usb::Config::new(vid, pid);
     if mode == settings::Mode::XInput {

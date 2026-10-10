@@ -16,6 +16,8 @@ import zlib
 
 import serial
 
+from bridge import DONGLE_IDS
+
 APP_ADDR = 0x1000
 
 
@@ -132,7 +134,7 @@ def find_port(want_bootloader):
     for p in lp.comports():
         if p.vid == 0x1915 and p.pid == 0x521F and want_bootloader:
             return p.device
-        if (p.vid, p.pid) in ((0x1209, 0x0001), (0x054C, 0x09CC)) and not want_bootloader:
+        if (p.vid, p.pid) in DONGLE_IDS and not want_bootloader:
             return p.device
     return None
 

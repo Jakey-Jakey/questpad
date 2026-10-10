@@ -10,7 +10,20 @@ FREQUENCY, TXPOWER, MODE, PCNF0, PCNF1 = 0x508, 0x50C, 0x510, 0x514, 0x518
 BASE0, BASE1, PREFIX0, PREFIX1, TXADDRESS, RXADDRESSES = 0x51C, 0x520, 0x524, 0x528, 0x52C, 0x530
 
 # USB ids the dongle firmware uses: HID mode, DS4 mode (XInput mode has no serial port).
-DONGLE_IDS = {(0x1209, 0x0001), (0x054C, 0x09CC)}
+HID_IDS = [(0x1209, 0x5151), (0x1209, 0x0001)]  # 0x0001 = firmware 1.0.0
+DONGLE_IDS = {*HID_IDS, (0x054C, 0x09CC)}
+
+
+def open_hid():
+    """Open the dongle's HID-mode gamepad with hidapi (for the test scripts)."""
+    import hid
+
+    for vid, pid in HID_IDS:
+        if hid.enumerate(vid, pid):
+            dev = hid.device()
+            dev.open(vid, pid)
+            return dev
+    raise SystemExit("dongle not found in HID mode")
 
 ADV_BASE = 0xFACEB00C
 ADV_PREFIX = 0xAA

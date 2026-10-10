@@ -2,9 +2,8 @@
 import struct
 import time
 
-import hid
 
-from bridge import Bridge
+from bridge import Bridge, open_hid
 
 
 def report(buttons=0, hat=8, lt=0, rt=0, lx=0, ly=0, rx=0, ry=0):
@@ -13,8 +12,7 @@ def report(buttons=0, hat=8, lt=0, rt=0, lx=0, ly=0, rx=0, ry=0):
 
 def main():
     b = Bridge()
-    dev = hid.device()
-    dev.open(0x1209, 0x0001)
+    dev = open_hid()
     dev.set_nonblocking(False)
     cases = [
         ("neutral", report()),

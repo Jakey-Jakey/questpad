@@ -5,14 +5,14 @@
 import sys
 import time
 
-import hid
+from bridge import open_hid
+
 
 
 def main():
     left, right = int(sys.argv[1]), int(sys.argv[2])
     secs = float(sys.argv[3]) if len(sys.argv) > 3 else 0.5
-    dev = hid.device()
-    dev.open(0x1209, 0x0001)
+    dev = open_hid()
     try:
         dev.write([0x00, left, right])  # report id 0 (none), then [left, right]
         time.sleep(secs)

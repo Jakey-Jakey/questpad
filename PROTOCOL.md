@@ -182,7 +182,7 @@ Nordic's Open USB DFU bootloader.
 | `selfupdate.rs`, `wdt.rs` | in-place firmware updates, watchdog |
 | `main.rs` | USB setup per mode, and the serial protocol the control panel uses (command list at the top) |
 
-**USB modes.** Generic gamepad + serial port (`1209:0001`), DS4 (`054C:09CC`, gamepad + serial port), and XInput
+**USB modes.** Generic gamepad + serial port (`1209:5151`; firmware 1.0.0 used the pid.codes test id `1209:0001`), DS4 (`054C:09CC`, gamepad + serial port), and XInput
 (`045E:028E`, Xbox 360 interfaces only, so no serial port). DS4 mode reports gyro at 16 per °/s and accel at 8192 per g
 and says so in its calibration report, so hosts scale it correctly.
 
