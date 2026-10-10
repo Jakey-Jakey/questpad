@@ -2,7 +2,7 @@
 
 # QuestPad
 
-**Use Meta Quest Touch controllers as a regular Controller.**
+**Use Meta Quest Touch controllers as a regular controller.**
 
 [![build](https://github.com/Jakey-Jakey/questpad/actions/workflows/build.yml/badge.svg)](https://github.com/Jakey-Jakey/questpad/actions/workflows/build.yml)
 [![license](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue)](#license)
@@ -11,10 +11,10 @@
 
 </div>
 
-Quest controllers work with headsets over a private 2.4 GHz radio link. QuestPad is firmware that allows a **Nordic nRF52840 Dongle** (about ~$11 USD) to speak that protocol, so the controllers connect to it as if it were a headset. Your computer then sees one combined controller: sticks, triggers, buttons, rumble, and gyro too. (I think) This is the first way to directly connect Meta Quest controllers directly to PC.
+Quest controllers work with headsets over a private 2.4 GHz radio link. QuestPad is firmware that allows a **Nordic nRF52840 Dongle** (about $11 USD) to speak that protocol, so the controllers connect to it as if it were a headset. Your computer then sees one combined controller: sticks, triggers, buttons, rumble, and gyro in DS4 mode. (I think) This is the first way to connect Meta Quest controllers directly to a PC.
 
 ## Features
-- **Both controllers as one gamepad**, laid out like an Xbox pad and One controller alone works as a mini gamepad.
+- **Both controllers as one gamepad**, laid out like an Xbox pad, and one controller alone works as a mini gamepad.
 - **Three USB modes**: generic gamepad, PlayStation 4 controller, or Xbox 360 controller (XInput games on Windows).
 - **Rumble**, plus small buzzes when a controller connects and when its battery runs low.
 - **Pair with one button press** on the dongle; no computer needed. 
@@ -102,7 +102,7 @@ add yourself to the `dialout` group (or equivalent) so the panel can open the do
 **A controller won't connect.** Press a button to wake it. If it still doesn't appear (dongle light blinking),
 pair it again. After a firmware reinstall, use **Restore pairing…** or re-pair both controllers.
 
-**The panel doesn't open on macOS.** Do not use apples built in python. Install Python from
+**The panel doesn't open on macOS.** Don't use Apple's built-in Python. Install Python from
 [python.org](https://www.python.org/downloads/) and open `QuestPad.command` again.
 
 **Firmware install says no bootloader was found.** Press the small sideways RESET button on the dongle (the red light
@@ -126,7 +126,7 @@ tools/package.sh             # build the release zip into dist/
 | `research/` | the analysis scripts used to work out the protocol |
 
 **How it works:** the radio protocol, pairing, encryption, controller data and the dongle internals are written up
-in **[PROTOCOL.md](PROTOCOL.md)**. Ideas for the future are in [IDEAS.md](IDEAS.md) No idea if I'll get to em.
+in **[PROTOCOL.md](PROTOCOL.md)**. Ideas for the future are in [IDEAS.md](IDEAS.md). No idea if I'll get to 'em.
 
 ## Supporting a new controller
 If you have Quest 2 or Quest 3 controllers, you can help: the steps for capturing what a controller sends, and what
