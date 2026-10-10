@@ -1,7 +1,7 @@
 //! Touch controllers -> one combined pad state, encoded per USB mode (HID here, DS4 in `ds4.rs`,
 //! XInput in `xinput.rs`), plus the power policy (the controllers have no off switch).
 //!
-//! Notification ids (verified on air, see NOTES.md): 0 battery %; 1 IMU [ts u48][accel xyz i16
+//! Notification ids (verified on air, see PROTOCOL.md): 0 battery %; 1 IMU [ts u48][accel xyz i16
 //! ~1024/g][gyro xyz i16 ~8.2/dps]; 2 stick x,y i16 (+y up, 0,0 at rest: the controllers apply
 //! their own calibration); 3 trigger, grip 12-bit packed, inverted (4095 released); 4 buttons
 //! (bit0 A/X, bit1 B/Y, bit2 stick click, bit3 Oculus/menu); 5 capacitive touch bits.

@@ -81,7 +81,7 @@ pub const DEFAULT: Settings = Settings {
     buzz_amp: 200,
     led_level: 40,
     off_on_suspend: true,
-    // Measured on the right controller (NOTES.md): held naturally, Touch -Z is up and -Y points
+    // Measured on the right controller (PROTOCOL.md): held naturally, Touch -Z is up and -Y points
     // forward, so DS4 x = +X, y = -Z, z = +Y.
     imu_map: [0x00, 0x82, 0x01],
 };

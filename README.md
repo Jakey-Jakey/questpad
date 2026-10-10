@@ -30,7 +30,7 @@ they would to a Quest, and your computer sees one combined controller with rumbl
 | **Quest 2** Touch | ❔ untested | Probably a close relative of the same radio protocol, but newer controllers appear to use a key-exchange based pairing that Quest 1 controllers don't, so pairing would need that added. |
 | **Quest 3 / 3S** Touch Plus | ❔ untested | Nothing known yet. |
 
-Contributions that make QuestPad work with more controllers are very welcome — see [NOTES.md](NOTES.md) for the
+Contributions that make QuestPad work with more controllers are very welcome — see [PROTOCOL.md](PROTOCOL.md) for the
 protocol and the tools used to map it.
 
 ## What you need
@@ -93,8 +93,8 @@ Avoid writing controller register `0x13` (clears its pairing) and `0x1c` (radio 
 ## How it works
 The controllers talk a proprietary protocol ("Pulsar"): a 2 Mbit nRF radio link with a 2 ms beacon from the host,
 BLE-style channel hopping, per-controller time slots and AES-CCM-encrypted uplinks. Pairing uses the controllers'
-own device-management mode to install a network id and key that the dongle generates. The protocol write-up and
-everything verified on hardware is in **[NOTES.md](NOTES.md)**; ideas for what's next are in [IDEAS.md](IDEAS.md).
+own device-management mode to install a network id and key that the dongle generates. The protocol write-up is in
+**[PROTOCOL.md](PROTOCOL.md)**; ideas for what's next are in [IDEAS.md](IDEAS.md).
 
 `research/tools` and `research/ghidra/scripts` contain the analysis helpers used. The firmware images they were run
 on (from Meta's Quest 1 OTA) are not included.

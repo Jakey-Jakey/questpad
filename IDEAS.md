@@ -1,7 +1,6 @@
 # Ideas / explorations
 
-Loose ideas for what the dongle + controller registers enable. Committed work lives in NOTES.md → Open;
-facts (register map, protocol) live in NOTES.md too. Items here are unscoped until promoted.
+Loose ideas for what QuestPad could do next. The protocol and register map are in PROTOCOL.md.
 
 ## Motion (IMU: 500 Hz accel + gyro in every uplink, ntf id 1)
 - **Air mouse / couch-remote mode**: point to move the cursor, trigger = click, stick = scroll. Dongle adds a HID

@@ -17,3 +17,6 @@ research/*
 research/ghidra/*
 !research/ghidra/scripts/
 dist/
+
+# Private research log (published summary: PROTOCOL.md)
+NOTES.md

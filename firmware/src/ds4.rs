@@ -306,7 +306,7 @@ fn stick(v: i16) -> u8 {
 }
 
 /// Controller IMU -> DS4 frame. The Touch IMU axes map onto the DS4's (x right, y up, z toward
-/// the player; gyro = rotation about those axes); see NOTES.md for how this was measured.
+/// the player; gyro = rotation about those axes); see PROTOCOL.md (IMU axes).
 fn imu_axes(p: &Pad) -> ([i16; 3], [i16; 3]) {
     let g = p.imu.gyro;
     let a = p.imu.accel;
