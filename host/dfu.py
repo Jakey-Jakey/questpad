@@ -73,7 +73,8 @@ def slip(data):
 
 
 class Dfu:
-    def __init__(self, port):
+    def __init__(self, port, progress=print):
+        self.progress = progress
         self.s = serial.Serial(port, 115200, timeout=2)
         self.buf = bytearray()
 
@@ -114,17 +115,14 @@ class Dfu:
             if got_off != off + len(obj) or got_crc != crc & 0xFFFFFFFF:
                 raise RuntimeError(f"CRC mismatch at {got_off:#x}: {got_crc:#x} != {crc & 0xFFFFFFFF:#x}")
             self.req(0x04)
-            sys.stdout.write(f"\r  {off + len(obj)}/{len(data)} bytes")
-            sys.stdout.flush()
-        print()
+            self.progress(f"{off + len(obj)}/{len(data)} bytes")
 
     def flash(self, fw):
         self.req(0x02, struct.pack("<H", 0))  # receipt notifications off
         (mtu,) = struct.unpack("<H", self.req(0x07))
-        print(f"bootloader MTU {mtu}")
-        print("sending init packet")
+        self.progress(f"bootloader MTU {mtu}; sending init packet")
         self.send_object(1, init_packet(fw), mtu)
-        print("sending firmware")
+        self.progress("sending firmware")
         self.send_object(2, fw, mtu)
 
 
@@ -134,9 +132,25 @@ def find_port(want_bootloader):
     for p in lp.comports():
         if p.vid == 0x1915 and p.pid == 0x521F and want_bootloader:
             return p.device
-        if p.vid == 0x1209 and p.pid == 0x0001 and not want_bootloader:
+        if (p.vid, p.pid) in ((0x1209, 0x0001), (0x054C, 0x09CC)) and not want_bootloader:
             return p.device
     return None
+
+
+class DfuError(Exception):
+    pass
+
+
+def dfu_flash(fw, progress=print, port=None):
+    """Flash `fw` through the Nordic bootloader (the dongle must be in DFU: RESET button)."""
+    port = port or find_port(True)
+    if not port:
+        raise DfuError("No DFU bootloader found. Press the dongle's RESET button (the small sideways one) "
+                       "so the red LED pulses, then retry.")
+    time.sleep(0.5)
+    progress(f"flashing {len(fw)} bytes via {port}")
+    Dfu(port, progress).flash(fw)
+    progress("done; dongle is rebooting into the new firmware")
 
 
 def main():
@@ -164,13 +178,10 @@ def main():
             port = find_port(True)
             if port:
                 break
-    if not port:
-        sys.exit("No DFU bootloader found. Press the dongle's RESET button (the small sideways one) "
-                 "so the red LED pulses, then retry.")
-    time.sleep(0.5)
-    print(f"flashing {len(fw)} bytes via {port}")
-    Dfu(port).flash(fw)
-    print("done; dongle is rebooting into the new firmware")
+    try:
+        dfu_flash(fw, port=port)
+    except DfuError as e:
+        sys.exit(str(e))
 
 
 if __name__ == "__main__":

@@ -50,18 +50,22 @@ def forge(region, pos, target):
     return bytes(region)
 
 
-def main():
-    fw = open(sys.argv[1], "rb").read()
-    b = Bridge()
-    print("dongle:", b.ping())
+class UpdateError(Exception):
+    pass
+
+
+def self_update(fw, progress=print, bridge=None):
+    """Flash `fw` (bytes) through the running dongle firmware. `progress(text)` gets status lines."""
+    b = bridge or Bridge()
+    progress(f"dongle: {b.ping()[1]}")
     image_size, image_crc, bank_code = (b.peek(SETTINGS + o) for o in (0x18, 0x1C, 0x20))
     if bank_code != 1 or image_size < FORGE_OFF + 4:
-        sys.exit(f"unexpected bootloader settings (size={image_size:#x} code={bank_code}); use dfu.py")
+        raise UpdateError(f"unexpected bootloader settings (size={image_size:#x} code={bank_code}); use DFU")
     total = max(len(fw), image_size)
     total = (total + 3) & ~3
     img = bytearray(fw.ljust(total, b"\xFF"))
     if img[FORGE_OFF : FORGE_OFF + 4] != b"\0\0\0\0":
-        sys.exit("vector-table slot 0x1C is not free in this image")
+        raise UpdateError("vector-table slot 0x1C is not free in this image")
     img[:image_size] = forge(img[:image_size], FORGE_OFF, image_crc)
     img = bytes(img)
 
@@ -69,23 +73,38 @@ def main():
         b.send(payload)
         f = b._wait(0xF0, timeout=3)
         if not f[2]:
-            raise SystemExit(f"dongle rejected step {payload[0]:#x}")
+            raise UpdateError(f"dongle rejected step {payload[0]:#x}")
 
-    print(f"uploading {len(img)} bytes (bootloader checks first {image_size:#x}, crc {image_crc:#010x})")
+    progress(f"uploading {len(img)} bytes")
     call(struct.pack("<BI", 0x70, len(img)))
     step = 200
     for off in range(0, len(img), step):
         call(struct.pack("<BI", 0x71, off) + img[off : off + step])
+        if off % 4000 == 0:
+            progress(f"uploading {off * 100 // len(img)}%")
     b.send(struct.pack("<BII", 0x72, len(img), zlib.crc32(img)))
-    print("flashing; dongle will reboot")
+    progress("flashing; dongle will reboot")
+    try:
+        b.s.close()
+    except OSError:
+        pass
     time.sleep(3)
     for _ in range(30):
         try:
-            print("dongle:", Bridge().ping())
-            return
+            version = Bridge().ping()[1]
+            progress(f"dongle: {version}")
+            return version
         except (SystemExit, Exception):
             time.sleep(0.5)
-    sys.exit("dongle did not come back; press its RESET button and use dfu.py")
+    raise UpdateError("dongle did not come back; press its RESET button and flash via DFU")
+
+
+def main():
+    fw = open(sys.argv[1], "rb").read()
+    try:
+        self_update(fw)
+    except UpdateError as e:
+        sys.exit(str(e))
 
 
 if __name__ == "__main__":
