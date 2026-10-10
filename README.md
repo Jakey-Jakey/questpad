@@ -2,7 +2,7 @@
 
 # QuestPad
 
-**Use Meta Quest Touch controllers as a regular gamepad. No headset, no phone, no drivers.**
+**Use Meta Quest Touch controllers as a regular Controller.**
 
 [![build](https://github.com/Jakey-Jakey/questpad/actions/workflows/build.yml/badge.svg)](https://github.com/Jakey-Jakey/questpad/actions/workflows/build.yml)
 [![license](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue)](#license)
@@ -11,18 +11,14 @@
 
 </div>
 
-Quest controllers only talk to a Quest headset, over a private 2.4 GHz radio link. QuestPad teaches a cheap
-**Nordic nRF52840 Dongle** (about $11) to speak that protocol, so the controllers connect to it as if it were a
-headset. Your computer then sees one combined controller: sticks, triggers, buttons, rumble, and in DS4 mode the
-gyro too. As far as we know it is the first way to use Touch controllers without a headset.
+Quest controllers work with headsets over a private 2.4 GHz radio link. QuestPad is firmware that allows a **Nordic nRF52840 Dongle** (about ~$11 USD) to speak that protocol, so the controllers connect to it as if it were a headset. Your computer then sees one combined controller: sticks, triggers, buttons, rumble, and gyro too. (I think) This is the first way to directly connect Meta Quest controllers directly to PC.
 
 ## Features
-- **Both controllers as one gamepad**, laid out like an Xbox pad. One controller alone works as a mini gamepad.
-- **Three USB modes**: generic gamepad, **PlayStation 4 controller** (Steam, SDL games, macOS and Linux know it:
-  no setup, with gyro, rumble and battery), or **Xbox 360 controller** (XInput games on Windows).
+- **Both controllers as one gamepad**, laid out like an Xbox pad and One controller alone works as a mini gamepad.
+- **Three USB modes**: generic gamepad, PlayStation 4 controller, or Xbox 360 controller (XInput games on Windows).
 - **Rumble**, plus small buzzes when a controller connects and when its battery runs low.
-- **Pair with one button press** on the dongle; no computer needed. The pairing lives on the dongle.
-- **An off switch the controllers never had**: hold Oculus or Menu for 3 s, put them down, and they switch off.
+- **Pair with one button press** on the dongle; no computer needed. 
+- **An off switch the controllers never had**: hold Oculus or Menu for 3 s, put them down, and they switch off after about a second.
   They also switch off when idle or when the computer sleeps, and wake when you pick them up.
 - **Standalone**: once set up, plug the dongle in anywhere. The control panel is only for setup and settings.
 
@@ -39,14 +35,13 @@ Contributions that make QuestPad work with more controllers are very welcome. Se
 | computer | status |
 |---|---|
 | macOS | ✅ all modes tested |
-| Windows | ✅ generic gamepad mode tested with Steam; DS4 and XInput modes not yet confirmed |
+| Windows | ✅ all modes should work, generic gamepad mode tested |
 | Linux | ❔ untested (DS4 mode uses the kernel's `hid-playstation` driver, XInput mode `xpad`) |
 
 ## What you need
-- A **Nordic nRF52840 Dongle** (PCA10059), sold by Mouser, Digi-Key and others.
-- Your Touch controllers, each with an AA battery.
-- **Python 3** for the control panel: get it from [python.org](https://www.python.org/downloads/) (includes
-  everything the panel needs).
+- A **Nordic nRF52840 Dongle** (PCA10059)
+- Your Touch controllers
+- **Python 3** for the control panel
 
 ## Quick start
 1. **Download** the latest `questpad-<version>.zip` from [Releases](https://github.com/Jakey-Jakey/questpad/releases)
@@ -72,9 +67,9 @@ trigger → RT, grip → RB, Oculus → Guide, stick click → RS.
 |---|---|---|
 | Generic gamepad | green | anything that takes a USB gamepad; Steam asks you to map the buttons once |
 | DS4 (PlayStation 4) | blue | **Steam**, SDL games, emulators, macOS, Linux: no setup, gyro, rumble, battery |
-| XInput (Xbox 360) | purple | Windows games that only support Xbox controllers |
+| XInput (Xbox 360) | purple | If you don't need gyro this is recommended |
 
-Switch in the panel or by holding the dongle's button for 3 s (it steps through the modes in that order).
+Switch in the panel or by holding the dongle's button for 3 s (it steps through the modes in the above order).
 
 **The dongle's light.**
 | light | meaning |
@@ -85,7 +80,7 @@ Switch in the panel or by holding the dongle's button for 3 s (it steps through 
 | red | not paired yet |
 | three green / red flashes | pairing worked / failed |
 
-**The dongle's button.** Tap = pair a controller (tap again to cancel) · hold 3 s = next mode · hold 10 s = forget the
+**The dongle's big button.** Tap = pair a controller (tap again to cancel) · hold 3 s = next mode · hold 10 s = forget the
 pairing.
 
 **Turning controllers off.** Hold **Oculus** or **Menu** for 3 s until they buzz, then put them down; each switches
@@ -97,7 +92,7 @@ the hold time for the off gesture, low-battery warning level, buzz strength, don
 one-controller mini pad, switch-off on computer sleep, and which controller's gyro DS4 mode uses.
 
 ## Troubleshooting
-**Steam asks me to set up the controller.** That's the generic gamepad mode. Switch to **DS4** mode and Steam
+**Steam asks me to set up the controller.** That's the generic gamepad mode. Switch to DS4 mode and Steam
 recognises it as a PlayStation 4 controller with everything already mapped.
 
 **The control panel says "Dongle not found".** Check it's plugged in. In **XInput** mode the panel can't reach the
@@ -107,7 +102,7 @@ add yourself to the `dialout` group (or equivalent) so the panel can open the do
 **A controller won't connect.** Press a button to wake it. If it still doesn't appear (dongle light blinking),
 pair it again. After a firmware reinstall, use **Restore pairing…** or re-pair both controllers.
 
-**The panel doesn't open on macOS.** Apple's built-in Python has a broken window toolkit; install Python from
+**The panel doesn't open on macOS.** Do not use apples built in python. Install Python from
 [python.org](https://www.python.org/downloads/) and open `QuestPad.command` again.
 
 **Firmware install says no bootloader was found.** Press the small sideways RESET button on the dongle (the red light
@@ -131,7 +126,7 @@ tools/package.sh             # build the release zip into dist/
 | `research/` | the analysis scripts used to work out the protocol |
 
 **How it works:** the radio protocol, pairing, encryption, controller data and the dongle internals are written up
-in **[PROTOCOL.md](PROTOCOL.md)**. Ideas for the future are in [IDEAS.md](IDEAS.md).
+in **[PROTOCOL.md](PROTOCOL.md)**. Ideas for the future are in [IDEAS.md](IDEAS.md) No idea if I'll get to em.
 
 ## Supporting a new controller
 If you have Quest 2 or Quest 3 controllers, you can help: the steps for capturing what a controller sends, and what
