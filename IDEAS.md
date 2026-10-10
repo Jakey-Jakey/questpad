@@ -39,6 +39,26 @@ facts (register map, protocol) live in NOTES.md too. Items here are unscoped unt
   timing, so we could sync flashes to the webcam's exposure. "See the dots" is easy; full optical 6DoF (constellation
   tracking fused with our IMU) is a big project.
 
+## Making it accessible (no Rust / Python for users)
+Everything host-side goes over the dongle's USB CDC serial port (Nordic DFU = SLIP + protobuf init packet, our
+self-update, DM pairing, bridge commands), so it can all move out of the Python scripts.
+- **Web app (Web Serial)**: static page on GitHub Pages (HTTPS, required). Flash: bootloader → Nordic serial DFU
+  (port `dfu.py`; show "press RESET" with a picture, the only button press ever needed), running firmware →
+  in-place self-update (port `selfupdate.py`). Pair: generate network id + key with `crypto.getRandomValues`,
+  guide "hold Oculus + Y/B", run DM pairing (`dm.py`), store on the dongle (bridge 0x22), offer a backup download.
+  Test / configure: live input panel, rumble, battery, power off, future settings. ~600–800 lines of JS.
+  Limits: Chromium desktop only (no Safari / Firefox); Linux needs serial permission (`dialout`). Firmware .bin is
+  published with the site by a GitHub Action (browsers can't fetch GitHub release assets: no CORS).
+- **Desktop app (BetterJoy-style, lightweight)**: tray app with battery, connect / disconnect notifications, power-off,
+  settings, flash + pair. Unlike BetterJoy it doesn't need to do the mapping (the firmware already presents a gamepad),
+  so it can stay small. What it adds over the web app: always running (battery warnings, notification buzzes,
+  audio → haptics, per-game profile switching), works in any browser setup, and can create **virtual controllers**
+  (ViGEm on Windows → XInput without a firmware XInput mode; `uinput` on Linux). Costs: three platform builds,
+  code signing / notarization (macOS Gatekeeper, Windows SmartScreen warnings without it).
+- **Both from one codebase**: build the UI as a web app with a small "transport" interface (Web Serial in the
+  browser, native serial in a **Tauri** wrapper). Ship the web page first (zero install for flashing / pairing), then
+  wrap it as the tray app.
+
 ## Status / tooling
 - `quest-status`: serials, firmware versions, battery % + mV, RSSI, packet loss, link health per controller.
 - Decode calibration registers (0x4c / 0x4f / 0x99) so stick centre / trigger ranges use factory values.
