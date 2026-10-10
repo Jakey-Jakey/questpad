@@ -1,128 +1,204 @@
 # How QuestPad works
 
-A summary of the Quest 1 Touch controllers' radio protocol as QuestPad implements it, and of the dongle firmware.
-Everything here was verified on hardware (controller firmware app 1.17.2 / bootloader 1.13.0). Byte orders are
-little-endian unless noted. Meta's internal name for the protocol is **Pulsar**.
+This is a guide to the Quest 1 Touch controllers' radio protocol as QuestPad implements it, and to the dongle
+firmware — enough to understand the code, debug it, or add support for another controller. Everything here was
+verified on hardware (controller firmware 1.17.2, bootloader 1.13.0). Multi-byte values are little-endian unless
+noted. Meta's internal name for the protocol is **Pulsar**.
 
-## Radio (PHY)
-- nRF "2 Mbit" mode (`MODE=1`), fast ramp-up, no whitening.
-- 5-byte addresses (4-byte base + 1-byte prefix), big-endian on air (`PCNF1 = 0x01040000 | maxlen`).
-- 24-bit CRC over the address too: `CRCCNF=3`, poly `0x1108421` (with the implicit top bit), init `0xFFFFFF`.
-- Packet layout in RAM: `[S0][LEN][S1][payload]` (`PCNF0 = 0x00100108`) on the main link;
-  `[LEN][payload]` (`PCNF0 = 8`) in pairing mode.
+- [At a glance](#at-a-glance)
+- [Radio](#radio)
+- [Pairing](#pairing)
+- [The main link](#the-main-link)
+- [Controller data](#controller-data)
+- [Commands to a controller](#commands-to-a-controller)
+- [Controller registers](#controller-registers)
+- [The dongle firmware](#the-dongle-firmware)
+- [Adding another controller](#adding-another-controller)
 
-## Pairing (device-management mode)
+## At a glance
+| | |
+|---|---|
+| Radio | Nordic proprietary 2 Mbit/s, 2404–2478 MHz, 24-bit CRC |
+| Pairing | the controller's bootloader accepts a network id + 128-bit key over a separate "device management" link |
+| Link timing | 2 ms frames: one beacon from the host, then up to five controller time slots |
+| Hopping | 37 channels, BLE channel-selection algorithm #1, hop size from the network id |
+| Security | controller → host packets are AES-CCM encrypted with the pairing key; beacons are plaintext |
+| Controller data | a 4-byte debug-log chunk plus tagged entries: buttons, stick, trigger/grip, touch, IMU, battery |
+| Commands | register reads / writes carried in beacons: vibration, power off, standby, … |
+
+## Radio
+QuestPad drives the nRF52840 radio directly with the same settings the headset uses:
+
+| setting | value |
+|---|---|
+| mode | `MODE = 1` (Nordic 2 Mbit), fast ramp-up, no whitening |
+| address | 4-byte base + 1-byte prefix, big-endian on air (`PCNF1 = 0x01040000 \| maxlen`) |
+| CRC | 24 bits, covers the address: `CRCCNF = 3`, poly `0x1108421`, init `0xFFFFFF` |
+| packet layout | main link `[S0][LEN][S1][payload]` (`PCNF0 = 0x00100108`); pairing `[LEN][payload]` (`PCNF0 = 8`) |
+
+## Pairing
 Holding **Oculus + Y** (left) or **Oculus + B** (right) starts the controller's bootloader in a pairing mode
-("DM mode"):
-- It advertises every 102.2 ms for about 60 s on 2402 MHz, base address `0xFACEB00C`, prefix `0xAA`.
-  Advertisement: `[2][type u32][id0 u32][id1 u32][4 B][serial, 14 ASCII][status]`; type `0x13001101` = left,
-  `0x13011101` = right (bit 16 = hand).
-- A host answers on 2426 MHz, base address = `id0`, prefix `0xAA`, starting 1000 µs after the end of an
-  advertisement. The two sides then alternate, each transmitting 1000 µs after the end of the other's packet.
-- Host packet: `[LEN][hdr][seq][payload]`, `hdr = command << 1 | read`. Replies echo `seq`; bit 7 of the reply
-  header = error. Empty polls `[2][0][seq]` keep the link alive.
-- Useful commands: `0x03` read serial, `0x24` / `0x25` read app / bootloader version, `0x2F` read battery,
-  `0x14` **write pairing record** (20 bytes: `network_id u32`, `link_key[16]`), `0x15` reset into the main app.
-  The Quest 1 controllers take the record in plaintext; newer controllers appear to use a key-exchange pairing.
+("device management", DM).
 
-QuestPad generates a random network id (radio-address friendly: many bit transitions, no long runs) and a random
-128-bit key on the dongle, writes them to each controller, and stores them in the dongle's flash.
-
-## Main link
-The dongle plays the headset's role: a **2000 µs frame**, one beacon per frame from the host, then up to five
-device time slots.
-
-**Addressing.** Base address = `network_id`. The host's beacon uses prefix `0xF0`; a device in slot *s* transmits
-with prefix *s* + 1, so the host listens on logical addresses 1..5 and `RXMATCH − 1` is the slot.
-
-**Channels.** 37 channels (the BLE data-channel set): index 0..36 → `FREQUENCY` 4, 6, …, 24, 28, …, 78
-(2404–2478 MHz, skipping 2426). Hopping is BLE channel-selection algorithm #1: `unmapped = (cur + hop) % 37`,
-remapped through the used-channel list if masked, with `hop = (network_id & 0xFF) % 11 + 5`. A controller
-looking for the host listens on channel indices 0, 17 and 36 in turn until it hears a beacon.
-
-**Beacon** (`S0 = 4`, plaintext). Payload:
+**Advertising.** The controller advertises every 102.2 ms for about a minute on 2402 MHz, base address
+`0xFACEB00C`, prefix `0xAA`:
 
 | bytes | content |
 |---|---|
-| 0..5 | 3 flag bits, then the 37-bit channel map `<< 3` |
-| 5 | current (unmapped) channel index |
-| 6..8 | session id (any value; part of the IV) |
-| 8..14 | 48-bit timestamp in µs (part of the IV; must advance by exactly 2000 per frame) |
-| 14.. | control data (below) |
+| 0 | format version (2) |
+| 1..5 | type: `0x13001101` left, `0x13011101` right (bit 16 = hand) |
+| 5..9, 9..13 | `id0`, `id1` |
+| 13..17 | unknown |
+| 17..31 | serial number, 14 ASCII characters |
+| 31 | status bits |
 
-**Slots.** Devices transmit at 350, 575, 875, 1175 and 1475 µs after the beacon for slots 0..4. Slot 0 is shared,
-for joining. A controller declares the link lost after 24 missed beacons.
+**Connecting.** The host answers on 2426 MHz with base address `id0` (prefix `0xAA`), 1000 µs after the end of an
+advertisement. From then on the two sides alternate, each transmitting 1000 µs after the end of the other's packet.
 
-**Joining.** A controller sends, in slot 0: `[0][1][device_id 8][type u32]`. The host answers in the next
-beacon's control data with `[1][ack mask][2][device_id 8][slot 1..4][0][1]` (padded to 36 bytes); `3` instead
-of `2` rejects. Otherwise control data is `[downlink mask][ack mask]` (bit *s* of the ack mask = "got your slot-*s*
-packet last frame", sent on a good CRC).
+**Commands.** Host packet `[LEN][hdr][seq][payload]` with `hdr = command << 1 | read`; replies echo `seq`, and bit 7
+of the reply header marks an error. Empty polls `[2][0][seq]` keep the link alive.
 
-**Encryption.** Uplinks are AES-CCM (nRF CCM peripheral, BLE-style, 4-byte MIC, extended-length 2 Mbit mode)
-with the link key, packet counter 0, direction 0, and IV = beacon timestamp (u48) + session (u16). The nRF CCM
-decrypts at roughly radio speed (~310 µs for a full packet), so the firmware queues uplinks and finishes them in
-the CCM interrupt.
+| command | what |
+|---|---|
+| `0x03` read | serial number |
+| `0x24` / `0x25` read | app / bootloader version |
+| `0x2F` read | battery |
+| `0x14` write | **pairing record**: `network_id u32`, `link_key[16]` |
+| `0x15` write | reset into the main app |
 
-## Uplink data
-Decrypted uplink: `[slot][1][0x40 | seq][log item, 4 B][notification entries…]`. The 4-byte log item carries the
-controller's own text debug log, a few characters at a time (`host/link.py --log` shows it).
+Quest 1 controllers take the pairing record in plaintext; newer controllers appear to use a key-exchange based
+pairing instead. QuestPad generates a random network id (one that makes a good radio address: plenty of bit
+transitions, no long runs of equal bits) and a random 128-bit key, writes them to each controller, and keeps them in
+the dongle's flash.
 
-Notification entries: `[id:5 | len_lo:3 << 5][len_hi:4 | seq:3 << 4 | last << 7][data]`.
+## The main link
+The dongle plays the headset's role. Time is divided into **2000 µs frames**:
+
+```
+ T                 T+350  T+575   T+875   T+1175  T+1475           T+2000
+ |  beacon (host)  | slot0 | slot1 | slot2 | slot3 | slot4 |  idle   | next beacon ...
+ |<-- ~120 µs ---->|         controllers transmit (~250 µs each)
+```
+
+**Addressing.** Base address = `network_id`. The beacon uses prefix `0xF0`; a controller in slot *s* uses prefix
+*s* + 1, so the host listens on logical addresses 1..5 and `RXMATCH − 1` is the slot. Slot 0 is shared, for joining.
+
+**Channels.** 37 channels — the Bluetooth LE data-channel set: index 0..36 → `FREQUENCY` 4, 6, …, 24, 28, …, 78
+(2404–2478 MHz, skipping 2426). Each frame the host hops with BLE channel-selection algorithm #1:
+`unmapped = (current + hop) % 37` (remapped through the list of used channels if masked), with
+`hop = (network_id & 0xFF) % 11 + 5`. A controller looking for its host listens on channel indices 0, 17 and 36 in
+turn; once it hears a beacon it follows the hopping, and gives up after 24 missed beacons.
+
+**Beacon** (`S0 = 4`, not encrypted):
+
+| bytes | content |
+|---|---|
+| 0..5 | 3 flag bits, then the 37-bit channel map shifted left by 3 |
+| 5 | this frame's (unmapped) channel index |
+| 6..8 | session id — any value, part of the encryption IV |
+| 8..14 | 48-bit timestamp in µs — part of the IV; must advance by exactly 2000 per frame |
+| 14.. | control data, below |
+
+**Control data** in the beacon is normally `[downlink mask][ack mask]`, where bit *s* of the ack mask means "I got
+your slot-*s* packet last frame" (QuestPad acks on a good CRC, like the headset).
+
+**Joining.** A new controller sends `[0][1][device_id, 8 B][type u32]` in slot 0. The host answers in the next
+beacon's control data with `[1][ack mask][2][device_id][slot 1..4][0][1]`, padded to 36 bytes (`3` instead of `2`
+rejects). The controller then transmits in its own slot every frame.
+
+**Encryption.** Controller packets are AES-CCM encrypted (the nRF CCM peripheral in BLE-style, extended-length,
+2 Mbit mode; 4-byte MIC) with the pairing key, packet counter 0, direction 0, and an 8-byte IV made of the beacon
+timestamp (48 bits) and the session id (16 bits). The nRF CCM decrypts at roughly radio speed — about 310 µs for a
+full packet — so the firmware queues packets and finishes them in the CCM interrupt rather than waiting.
+
+## Controller data
+Each decrypted controller packet looks like:
+
+```
+[slot] [0x01] [0x40 | seq] [log chunk, 4 B] [entry] [entry] ...
+```
+
+The 4-byte log chunk carries the controller's own text debug log a few characters at a time (`host/link.py --log`
+prints it). It only advances when the host acks the packet.
+
+Each **entry** is `[id:5 | len_lo:3 << 5] [len_hi:4 | seq:3 << 4 | last << 7] [data]`:
 
 | id | content |
 |---|---|
 | 0 | battery % |
-| 1 | IMU, 18 B: timestamp u48 (µs), accel xyz i16 (~1024 / g), gyro xyz i16 (~8.2 / °/s); every 2 ms |
-| 2 | thumbstick x, y i16 (+x right, +y up; 0, 0 at rest, already calibrated) |
-| 3 | trigger, grip: two 12-bit values in 3 bytes, inverted (4095 = released, 0 = fully squeezed) |
-| 4 | buttons: bit 0 X/A, bit 1 Y/B, bit 2 stick click, bit 3 Menu/Oculus (bit 4 always set) |
-| 5 | capacitive touch bits (0x01 X/A, 0x02 Y/B, 0x04 stick, …) |
-| 6, 7 | unknown |
+| 1 | IMU, 18 B: timestamp (48-bit µs), accel x y z (i16, ~1024 per g), gyro x y z (i16, ~8.2 per °/s); every 2 ms |
+| 2 | thumbstick x, y (i16; +x right, +y up; exactly 0, 0 at rest — already calibrated) |
+| 3 | trigger, grip: two 12-bit values packed in 3 bytes, inverted (4095 = released, 0 = fully squeezed) |
+| 4 | buttons: bit 0 X / A, bit 1 Y / B, bit 2 stick click, bit 3 Menu / Oculus (bit 4 is always set) |
+| 5 | capacitive touch: 0x01 X / A, 0x02 Y / B, 0x04 stick, other bits not yet mapped |
+| 6, 7 | not yet known |
 
-IMU axes (right controller, held naturally): −Z points up and −Y points forward.
+**IMU orientation** (right controller, held naturally): −Z points up and −Y points forward, so for a DS4-style frame
+(x right, y up, z toward you) DS4 x = +X, y = −Z, z = +Y.
 
-## Downlink (commands to a controller)
-A beacon can carry one request: control data `[1 << slot][ack mask][register][seq | read << 4][data ≤ 32 B]`.
-A controller takes a request when its seq (or register, or read bit) differs from the last one it took, and
-echoes the seq of the last request frame it saw in the low nibble of its uplink flags. That echo comes from any
-beacon, whoever it was addressed to, so QuestPad uses one seq counter for all controllers and resends a request
-until the target controller echoes it. Read replies come back as uplink frames without the `0x40` bit:
-`[slot][register][flags][data]` (flags bit 5 = error).
+## Commands to a controller
+A beacon can carry one request, addressed by its downlink mask:
 
-Registers worth knowing (`host/regs.py` reads or writes them):
+```
+[1 << slot] [ack mask] [register] [seq | read << 4] [data, up to 32 B]
+```
 
-| register | what |
+A controller acts on a request when its seq (or register, or read bit) differs from the last request it took, and
+reports the seq of the last request frame it saw in the low nibble of its packet flags. Every controller reports the
+seq of *any* request it saw, so QuestPad uses one seq counter for all controllers and repeats a request until the
+target controller reports its seq. Read replies come back as `[slot][register][flags][data]` without the `0x40`
+bit; flags bit 5 means error.
+
+## Controller registers
+`host/regs.py` reads and writes these. Many other register numbers exist but do nothing on this firmware.
+
+| register | | what |
+|---|---|---|
+| `0x01` | read | maker / product / hand / hardware revision strings |
+| `0x02`, `0x03` | read | board serial, device serial |
+| `0x24`, `0x25` | read | app / bootloader version |
+| `0x2F` | read | battery: f32 %, then the cell voltage (u16, mV) |
+| `0x31`, `0x32` | read | IMU part number and configuration |
+| `0x05` | write | **power off** — wakes on motion or a button |
+| `0x06` | write | `1` standby (packets almost stop), `0` active |
+| `0x97` | write | **vibration strength**, 1 byte; stays on until set back to 0 |
+| `0x28` | read / write | IR LED timing: period (33333 or 40000 µs) and pulse width (1–99 µs) |
+| `0x15` / `0x16` | write | restart the controller (probably into pairing mode / the main app; untested) |
+| `0x13` | write | ⚠️ clears the controller's pairing |
+| `0x1c` | write | ⚠️ radio test mode until the controller is reset |
+
+## The dongle firmware
+Rust on [embassy](https://embassy.dev), for the nRF52840 Dongle (PCA10059). The application sits at `0x1000`, under
+Nordic's Open USB DFU bootloader.
+
+| | |
 |---|---|
-| `0x01` read | maker / product / hand / hardware revision strings |
-| `0x02`, `0x03` read | board serial, device serial |
-| `0x24`, `0x25` read | app / bootloader version |
-| `0x2F` read | battery: f32 %, then u16 cell voltage in mV |
-| `0x31`, `0x32` read | IMU part and configuration |
-| `0x05` write | **power off** (wakes on motion or a button) |
-| `0x06` write | 1 = standby (uplinks almost stop), 0 = active |
-| `0x97` write | **vibration strength**, 1 byte (stays on until set to 0) |
-| `0x28` read / write | IR LED sync: period (33333 or 40000 µs), pulse width (1–99 µs) |
-| `0x13` write | clears the controller's pairing — avoid |
-| `0x1c` write | radio test mode until reset — avoid |
+| `link.rs` | the main-link host: frame timing, hopping, joins, decryption queue, requests |
+| `radio.rs` | radio driver and the pairing-mode (DM) engine |
+| `gamepad.rs` | controller data → one pad state; HID mode report; power-off gesture and idle timer |
+| `ds4.rs`, `xinput.rs` | DS4 and Xbox 360 modes (descriptor / layout from GP2040-CE) |
+| `ui.rs` | status LED, button, pairing from the dongle |
+| `settings.rs`, `pairing.rs` | settings (flash `0xDE000`) and the pairing record (flash `0xDF000`) |
+| `selfupdate.rs`, `wdt.rs` | in-place firmware updates, watchdog |
+| `main.rs` | USB setup per mode, and the serial protocol the control panel uses (command list at the top) |
 
-## Dongle firmware (`firmware/`)
-Rust + [embassy](https://embassy.dev) on the nRF52840 Dongle (PCA10059), application at `0x1000` under Nordic's
-Open USB DFU bootloader.
+**USB modes.** Generic gamepad + serial port (`1209:0001`), DS4 (`054C:09CC`, gamepad + serial port), and XInput
+(`045E:028E`, Xbox 360 interfaces only, so no serial port). DS4 mode reports gyro at 16 per °/s and accel at 8192 per g
+and says so in its calibration report, so hosts scale it correctly.
 
-- **Flash layout:** settings at `0xDE000`, pairing record at `0xDF000`; the firmware image ends below them.
-- **USB modes:** HID gamepad + serial port (`1209:0001`), DS4 (`054C:09CC`, HID + serial port) and XInput
-  (`045E:028E`, vendor interfaces only). The DS4 descriptor and the XInput layout follow GP2040-CE. DS4 mode
-  reports gyro at 16 LSB per °/s and accel at 8192 LSB per g and says so in its calibration feature report.
-- **Front panel:** RGB LED (red P0.08, green P0.12, blue P1.09, active low) and the button on P1.06.
-- **Updating in place:** the bootloader checks the application's CRC against a stored value, so `host/selfupdate.py`
-  sets four spare bytes in the vector table (offset `0x1C`) to make the new image match it; the firmware then
-  writes the image from a RAM routine. A watchdog (8 s) resets the dongle if it ever hangs.
-- **Serial protocol** (used by the control panel and `host/` tools): COBS-framed commands and events, documented
-  at the top of `firmware/src/main.rs`.
+**Front panel.** RGB LED: red P0.08, green P0.12, blue P1.09 (active low). Button: P1.06.
+
+**Updating in place.** The bootloader checks the application against a stored CRC that the application can't
+change, so `host/selfupdate.py` sets four spare bytes in the vector table (offset `0x1C`) to make the new image's
+CRC match, and the firmware writes the image from a routine running in RAM. A watchdog resets the dongle if it ever
+stops responding for 8 s.
 
 ## Adding another controller
-1. Put it in pairing mode and look at its advertisement (`host/sniff_adv.py`): type, ids, serial.
-2. Try `host/dm.py info` to see whether the device-management commands match.
-3. Pair it (`host/dm.py pair`) and watch it join (`host/link.py --raw`); check its type value and slot.
-4. Map its notifications with `host/link.py --changes` while pressing and moving things.
-5. Open a pull request with what you found, even if it only partly works.
+1. **Advertisement.** Put the controller in pairing mode and run `host/sniff_adv.py`: note its type, ids and
+   serial, and whether the packet layout matches the table above.
+2. **Device management.** Run `host/dm.py info`. If the version and battery reads work, the pairing commands
+   probably match too.
+3. **Pair and join.** `host/dm.py pair`, then `host/link.py --raw`: does it join, with what type value?
+4. **Map its data.** `host/link.py --changes` while you press, squeeze and move things; compare with
+   [Controller data](#controller-data).
+5. **Share it.** Open a pull request or an issue with what you found — partial results help.

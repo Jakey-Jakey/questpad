@@ -126,7 +126,7 @@ class Worker(threading.Thread):
 
 
 class App:
-    def __init__(self, root):
+    def __init__(self, root, demo=False):
         self.root = root
         root.title("QuestPad")
         root.minsize(560, 0)
@@ -136,8 +136,22 @@ class App:
         self.settings = None
         self.connected = False
         self._build()
+        if demo:
+            self._demo()
+            return
         self.worker.start()
         root.after(50, self._poll)
+
+    def _demo(self):
+        """Sample state with no dongle (for screenshots and UI work): `gui.py --demo`."""
+        self.connected = True
+        self._show_settings(dict(mode=1, deadzone_pct=3, grip_pct=50, idle_min=10, off_hold_s=3, connect_buzz=1,
+                                 low_batt_pct=10, single_mode=1, gyro_left=0, buzz_amp=200, led_level=40,
+                                 off_on_suspend=1, imu_map_x=0, imu_map_y=0x82, imu_map_z=1))
+        self._on_status(dict(mode="DS4", paired=True, pair_state="idle",
+                             controllers=[(1, "left", 100), (2, "right", 80)]))
+        self.ctl_rows["left"][2].set(".Y.. stick  +12, +71  trig   0  grip  86")
+        self.ctl_rows["right"][2].set("A... stick   +0,  +0  trig  64  grip   0")
 
     # ---- layout ----
 
@@ -458,7 +472,7 @@ def main():
     if tk.TkVersion < 8.6:
         sys.exit("This Python's Tk is too old (macOS's built-in Python hangs). Install Python 3 from python.org.")
     root = tk.Tk()
-    App(root)
+    App(root, demo="--demo" in sys.argv)
     root.mainloop()
 
 

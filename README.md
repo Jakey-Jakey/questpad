@@ -1,110 +1,153 @@
+<div align="center">
+
 # QuestPad
 
-Use **Meta Quest Touch controllers** as a normal gamepad — no headset, no phone. Quest 1 controllers work today.
-A $10 **Nordic nRF52840 Dongle** speaks the controllers' own 2.4 GHz radio protocol, so they connect to it the way
-they would to a Quest, and your computer sees one combined controller with rumble (and gyro in DS4 mode).
+**Use Meta Quest Touch controllers as a regular gamepad — no headset, no phone, no drivers.**
 
-> Not affiliated with, endorsed by, or supported by Meta, Sony or Microsoft. "Oculus", "Quest" and "Touch" are Meta
-> trademarks, used here only to say which hardware this works with.
+[![build](https://github.com/Jakey-Jakey/questpad/actions/workflows/build.yml/badge.svg)](https://github.com/Jakey-Jakey/questpad/actions/workflows/build.yml)
+[![license](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue)](#license)
+
+<img src="docs/gui.png" alt="The QuestPad control panel" width="560">
+
+</div>
+
+Quest controllers only talk to a Quest headset, over a private 2.4 GHz radio link. QuestPad teaches a cheap
+**Nordic nRF52840 Dongle** (about $11) to speak that protocol, so the controllers connect to it as if it were a
+headset. Your computer then sees one combined controller — sticks, triggers, buttons, rumble, and in DS4 mode the
+gyro too. As far as we know it is the first way to use Touch controllers without a headset.
 
 ## Features
-- Both controllers as **one gamepad**: left = left stick, X/Y, LT, grip → LB, menu → Start; right = right stick, A/B,
-  RT, grip → RB, Oculus → Guide; stick clicks → LS/RS. One controller alone works as a mini gamepad.
-- Three USB modes (switch from the app, or hold the dongle's button 3 s):
-  | mode | LED | best for |
-  |---|---|---|
-  | **HID gamepad** | green | anything; Steam asks you to set up the layout once |
-  | **DS4** (PlayStation 4 controller) | blue | **Steam**, SDL games, macOS, Linux: no setup, **gyro**, rumble, battery |
-  | **XInput** (Xbox 360 controller) | purple | Windows games without Steam; also Linux and macOS |
-- **Rumble** in both controllers, a short buzz when one connects, and a buzz when a battery runs low.
-- **Pair from the dongle's button**, no computer needed. The pairing is stored on the dongle.
-- **Power off** (Quest controllers have no off switch): hold **Oculus or Menu for 3 s** → short buzz → put them down
-  and they switch off once still; they wake when picked up. (Switching off after 10 min idle and when the computer
-  sleeps is implemented but not yet verified.)
-- A small **control panel app** for pairing, modes, settings, battery, test buzz and firmware updates.
+- **Both controllers as one gamepad**, laid out like an Xbox pad. One controller alone works as a mini gamepad.
+- **Three USB modes**: generic gamepad, **PlayStation 4 controller** (Steam, SDL games, macOS and Linux know it:
+  no setup, with gyro, rumble and battery), or **Xbox 360 controller** (XInput games on Windows).
+- **Rumble**, plus small buzzes when a controller connects and when its battery runs low.
+- **Pair with one button press** on the dongle; no computer needed. The pairing lives on the dongle.
+- **An off switch the controllers never had**: hold Oculus or Menu for 3 s, put them down, and they switch off.
+  They also switch off when idle or when the computer sleeps, and wake when you pick them up.
+- **Standalone**: once set up, plug the dongle in anywhere. The control panel is only for setup and settings.
 
 ## Supported controllers
 | controller | status | notes |
 |---|---|---|
-| **Quest 1** Touch | ✅ working | Tested with controller firmware app 1.17.2 / bootloader 1.13.0, on macOS (all modes) and Windows (HID mode with Steam; DS4 / XInput on Windows not yet verified). |
-| **Quest 2** Touch | ❔ untested | Probably a close relative of the same radio protocol, but newer controllers appear to use a key-exchange based pairing that Quest 1 controllers don't, so pairing would need that added. |
+| **Quest 1** Touch | ✅ working | Tested with controller firmware 1.17.2 (bootloader 1.13.0). |
+| **Quest 2** Touch | ❔ untested | Probably a close relative of the same protocol, but newer controllers appear to use a key-exchange based pairing that Quest 1 controllers don't, so pairing would need that added. |
 | **Quest 3 / 3S** Touch Plus | ❔ untested | Nothing known yet. |
 
-Contributions that make QuestPad work with more controllers are very welcome — see [PROTOCOL.md](PROTOCOL.md) for the
-protocol and the tools used to map it.
+Contributions that make QuestPad work with more controllers are very welcome — see
+[Supporting a new controller](#supporting-a-new-controller).
+
+| computer | status |
+|---|---|
+| macOS | ✅ all modes tested |
+| Windows | ✅ generic gamepad mode tested with Steam; DS4 and XInput modes not yet confirmed |
+| Linux | ❔ untested (DS4 mode uses the kernel's `hid-playstation` driver, XInput mode `xpad`) |
 
 ## What you need
-- A Nordic **nRF52840 Dongle (PCA10059)**.
-- Quest 1 Touch controllers (one AA each).
-- For the control panel: **Python 3** (from [python.org](https://www.python.org/downloads/); it includes Tk).
-  Nothing else to install.
+- A **Nordic nRF52840 Dongle** (PCA10059), sold by Mouser, Digi-Key and others.
+- Your Touch controllers, each with an AA battery.
+- **Python 3** for the control panel: get it from [python.org](https://www.python.org/downloads/) (includes
+  everything the panel needs).
 
-## Setup
-Download the latest release zip and unzip it.
+## Quick start
+1. **Download** the latest `questpad-<version>.zip` from [Releases](https://github.com/Jakey-Jakey/questpad/releases)
+   and unzip it.
+2. **Open the control panel**: double-click **`QuestPad.pyw`** (Windows) or **`QuestPad.command`** (macOS), or run
+   `python3 host/gui.py`.
+3. **Install the firmware**: click **Install / update firmware…**, choose `questpad.bin`, then press the dongle's
+   small **sideways RESET button** (the red LED pulses) and click OK. You only need the button this first time.
+4. **Pair each controller**: tap the dongle's button (or click **Pair a controller**), then hold
+   **Oculus + Y** (left) or **Oculus + B** (right) until the controller's light blinks. The dongle flashes green and
+   the controller buzzes.
+5. **Pick a mode** in the panel — **DS4** is best for Steam — and play. From now on the dongle works on its own.
 
-**1. Install the firmware** (once). Open the control panel (**double-click `QuestPad.pyw`** on Windows,
-**`QuestPad.command`** on macOS, or run `python3 host/gui.py`), click **Install / update firmware...**, pick
-`questpad.bin`, then press the dongle's small **sideways RESET button** (the red LED pulses) and click OK.
-Later updates need no button.
+Click **Back up pairing…** once and keep the file somewhere safe (and private: it's your controllers' key).
+Reinstalling the firmware through the RESET button can erase the pairing, and the backup saves re-pairing.
 
-**2. Pair each controller** (once each). Tap the dongle's button (its LED blinks blue) — or click **Pair a
-controller** in the app — then hold **Oculus + Y** (left) or **Oculus + B** (right) until the controller's LED
-blinks. The dongle flashes green and the controller buzzes when it's done.
+## Using QuestPad
+**Button layout.** Left: stick, X / Y, trigger → LT, grip → LB, Menu → Start, stick click → LS. Right: stick, A / B,
+trigger → RT, grip → RB, Oculus → Guide, stick click → RS.
 
-**3. Play.** Turn the controllers on (press a button); they connect within a second or two.
+**Modes.**
+| mode | LED | use it for |
+|---|---|---|
+| Generic gamepad | green | anything that takes a USB gamepad; Steam asks you to map the buttons once |
+| DS4 (PlayStation 4) | blue | **Steam**, SDL games, emulators, macOS, Linux — no setup, gyro, rumble, battery |
+| XInput (Xbox 360) | purple | Windows games that only support Xbox controllers |
 
-**Back up your pairing** from the app (*Back up pairing...*): a new firmware install through the RESET button can
-erase it, and restoring it saves re-pairing. Keep the file private; it is your controllers' key.
+Switch in the panel or by holding the dongle's button for 3 s (it steps through the modes in that order).
 
-## The dongle's LED and button
-| LED | meaning |
+**The dongle's light.**
+| light | meaning |
 |---|---|
-| green / blue / purple, solid | HID / DS4 / XInput mode, controller connected |
-| same colour, slow blink | waiting for controllers |
+| mode colour, solid | a controller is connected |
+| mode colour, slow blink | waiting for controllers |
 | fast blue blink | pairing |
 | red | not paired yet |
 | three green / red flashes | pairing worked / failed |
 
-Button: **tap** = pair a controller (tap again to cancel) · **hold 3 s** = next mode (HID → DS4 → XInput) ·
-**hold 10 s** = forget the pairing.
+**The dongle's button.** Tap = pair a controller (tap again to cancel) · hold 3 s = next mode · hold 10 s = forget the
+pairing.
 
-In **XInput mode** the control panel can't reach the dongle (Windows' Xbox driver owns it); hold the button 3 s to
-switch to HID mode first.
+**Turning controllers off.** Hold **Oculus** or **Menu** for 3 s until they buzz, then put them down; each switches
+off once it's still. They also switch off after 10 minutes untouched and when the computer goes to sleep.
+Pick one up (or press a button) to wake it.
 
-## Settings (control panel)
-Stick deadzone, how hard to squeeze a grip for LB/RB, idle power-off time, the power-off hold time, low-battery
-warning level, buzz strength, LED brightness, connect buzz, one-controller mini pad, power-off when the computer
-sleeps, and which controller's gyro DS4 mode uses.
+**Settings** (control panel): stick deadzone, grip strength that counts as LB / RB, idle time before switching off,
+the hold time for the off gesture, low-battery warning level, buzz strength, dongle LED brightness, connect buzz,
+one-controller mini pad, switch-off on computer sleep, and which controller's gyro DS4 mode uses.
+
+## Troubleshooting
+**Steam asks me to set up the controller.** That's the generic gamepad mode. Switch to **DS4** mode and Steam
+recognises it as a PlayStation 4 controller with everything already mapped.
+
+**The control panel says "Dongle not found".** Check it's plugged in. In **XInput** mode the panel can't reach the
+dongle (Windows' Xbox driver owns it): hold the dongle's button 3 s to switch to the generic mode first. On Linux,
+add yourself to the `dialout` group (or equivalent) so the panel can open the dongle's serial port.
+
+**A controller won't connect.** Press a button to wake it. If it still doesn't appear (dongle light blinking),
+pair it again. After a firmware reinstall, use **Restore pairing…** or re-pair both controllers.
+
+**The panel doesn't open on macOS.** Apple's built-in Python has a broken window toolkit; install Python from
+[python.org](https://www.python.org/downloads/) and open `QuestPad.command` again.
+
+**Firmware install says no bootloader was found.** Press the small sideways RESET button on the dongle (the red light
+starts pulsing), then try again.
 
 ## For developers
-Requirements: Rust (stable) with the `thumbv7em-none-eabihf` target, and Python 3.
-
+You need Rust (stable) with the `thumbv7em-none-eabihf` target, and Python 3.
 ```sh
 rustup target add thumbv7em-none-eabihf
-firmware/flash.sh            # build + flash (in place; --dfu for the RESET-button bootloader)
+firmware/flash.sh            # build and flash in place (add --dfu for the RESET-button bootloader)
 tools/package.sh             # build the release zip into dist/
 ```
 
-Command-line tools in `host/` (they use the bundled pySerial; `pip install -r host/requirements.txt` for hidapi):
-`link.py --watch` (live inputs, IMU, battery, link stats), `link.py --log` (the controllers' own debug log),
-`regs.py scan left` (controller registers), `rumble.py L R [s]`, `dm.py info|pair`.
-Avoid writing controller register `0x13` (clears its pairing) and `0x1c` (radio test mode until reset).
+| path | what |
+|---|---|
+| `firmware/` | dongle firmware (Rust, [embassy](https://embassy.dev)) |
+| `host/gui.py` | control panel (Tkinter; pySerial bundled in `host/vendor`; `--demo` shows sample data) |
+| `host/link.py` | `--watch` live inputs / IMU / battery / link stats, `--log` the controllers' own debug log |
+| `host/regs.py` | read and write controller registers |
+| `host/dm.py`, `host/sniff_adv.py` | pairing-mode tools |
+| `research/` | the analysis scripts used to work out the protocol |
 
-## How it works
-The controllers talk a proprietary protocol ("Pulsar"): a 2 Mbit nRF radio link with a 2 ms beacon from the host,
-BLE-style channel hopping, per-controller time slots and AES-CCM-encrypted uplinks. Pairing uses the controllers'
-own device-management mode to install a network id and key that the dongle generates. The protocol write-up is in
-**[PROTOCOL.md](PROTOCOL.md)**; ideas for what's next are in [IDEAS.md](IDEAS.md).
+**How it works** — the radio protocol, pairing, encryption, controller data and the dongle internals are written up
+in **[PROTOCOL.md](PROTOCOL.md)**. Ideas for the future are in [IDEAS.md](IDEAS.md).
 
-`research/tools` and `research/ghidra/scripts` contain the analysis helpers used. The firmware images they were run
-on (from Meta's Quest 1 OTA) are not included.
+## Supporting a new controller
+If you have Quest 2 or Quest 3 controllers, you can help: the steps for capturing what a controller sends, and what
+to look for, are in [PROTOCOL.md → Adding another controller](PROTOCOL.md#adding-another-controller). A pull request
+with partial findings is useful too.
 
-## Limitations
-- HID mode uses the pid.codes **test** USB id `1209:0001` until a proper one is assigned.
-- Gyro orientation was measured on the right controller; using the left one's gyro is unverified.
-- Only Quest 1 Touch controllers have been tested.
+## Acknowledgements
+- [GP2040-CE](https://github.com/OpenStickCommunity/GP2040-CE) — the DS4 report descriptor and Xbox 360 USB layout
+  used by the DS4 and XInput modes.
+- [embassy](https://embassy.dev) — the async Rust framework the firmware runs on.
+- [pySerial](https://github.com/pyserial/pyserial) — bundled so the control panel needs only Python.
 
 ## License
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT), at your option.
-Includes pySerial (BSD-3-Clause, `host/vendor/serial/LICENSE.txt`) and USB descriptors adapted from GP2040-CE (MIT,
-noted in `firmware/src/ds4.rs` and `firmware/src/xinput.rs`).
+Bundled pySerial is BSD-3-Clause (`host/vendor/serial/LICENSE.txt`); the GP2040-CE parts are MIT (noted in
+`firmware/src/ds4.rs` and `firmware/src/xinput.rs`).
+
+QuestPad is not affiliated with, endorsed by, or supported by Meta, Sony or Microsoft. "Meta", "Oculus", "Quest" and
+"Touch" are trademarks of Meta, used here only to describe which hardware this works with.
