@@ -1,12 +1,16 @@
 //! XInput mode: present as a wired Xbox 360 controller (045E:028E), which Windows' built-in
 //! `xusb22` driver (native XInput, with rumble) and Linux's `xpad` pick up with no setup.
 //!
-//! Only the 360's gamepad interface (vendor class FF/5D/01) is implemented; that is the one
-//! xusb22 and xpad use. The device class is vendor-specific, so Windows gives the whole device
-//! to xusb22: there is no serial port in this mode (switch modes with the dongle button).
+//! The configuration mirrors a wired 360 pad (layout as in GP2040-CE's XInputDescriptors.h,
+//! MIT, Copyright (c) 2021 Jason Skuby): gamepad (FF/5D/01), audio (FF/5D/03), plugin module
+//! (FF/5D/02) and security (FF/FD/13) interfaces. Only the gamepad interface is serviced; the
+//! others just NAK. Remote wakeup is deliberately not advertised (so hosts don't selectively
+//! suspend it: suspend powers the controllers off). The device class is vendor-specific, so
+//! Windows gives the whole device to xusb22: there is no serial port in this mode (switch modes
+//! with the dongle button).
 //!
 //! Input (endpoint 0x81, 20 bytes): [0x00][0x14][buttons1][buttons2][LT][RT][LX][LY][RX][RY]
-//! (i16 LE, +y = up)[6 reserved]. Output (endpoint 0x01): [0x00][0x08][0x00][left / big motor]
+//! (i16 LE, +y = up)[6 reserved]. Output (endpoint 0x02): [0x00][0x08][0x00][left / big motor]
 //! [right / small motor]... = rumble; [0x01][0x03][pattern] = ring LED (ignored).
 
 use embassy_time::{with_timeout, Duration};
@@ -19,9 +23,18 @@ pub const VID: u16 = 0x045E;
 pub const PID: u16 = 0x028E;
 pub const DEVICE_RELEASE: u16 = 0x0114;
 
-/// The 360's class-specific descriptor (type 0x21) for the gamepad interface, as on real pads:
-/// subtype gamepad, IN endpoint 0x81 (20-byte reports), OUT endpoint 0x01 (8-byte reports).
-const XUSB_DESCRIPTOR: [u8; 15] = [0x00, 0x01, 0x01, 0x25, 0x81, 0x14, 0x00, 0x00, 0x00, 0x00, 0x13, 0x01, 0x08, 0x00, 0x00];
+/// Class-specific descriptors (type 0x21 / 0x41, without their length / type bytes).
+/// Gamepad: subtype gamepad, IN 0x81 (20-byte reports), OUT 0x02 (8-byte reports).
+const GAMEPAD_DESC: [u8; 15] = [0x00, 0x01, 0x01, 0x25, 0x81, 0x14, 0x00, 0x00, 0x00, 0x00, 0x13, 0x02, 0x08, 0x00, 0x00];
+/// Audio (headset): mic IN 0x83, audio OUT 0x04, unknown IN 0x85 / OUT 0x06.
+const AUDIO_DESC: [u8; 25] = [
+    0x00, 0x01, 0x01, 0x01, 0x83, 0x40, 0x01, 0x04, 0x20, 0x16, 0x85, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x06,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+/// Plugin module: IN 0x86.
+const PLUGIN_DESC: [u8; 7] = [0x00, 0x01, 0x01, 0x22, 0x86, 0x03, 0x00];
+/// Security (XSM3; used by the 360 console only).
+const SECURITY_DESC: [u8; 4] = [0x00, 0x01, 0x01, 0x03];
 
 pub fn configure(cfg: &mut embassy_usb::Config) {
     cfg.device_class = 0xFF;
@@ -37,12 +50,31 @@ pub struct Endpoints<D: embassy_usb::driver::Driver<'static>> {
 }
 
 pub fn build<D: embassy_usb::driver::Driver<'static>>(builder: &mut Builder<'static, D>) -> Endpoints<D> {
+    let ep = |n, d| Some(EndpointAddress::from_parts(n, d));
     let mut func = builder.function(0xFF, 0x5D, 0x01);
+    // 0: gamepad
     let mut iface = func.interface();
     let mut alt = iface.alt_setting(0xFF, 0x5D, 0x01, None);
-    alt.descriptor(0x21, &XUSB_DESCRIPTOR);
-    let ep_in = alt.endpoint_interrupt_in(Some(EndpointAddress::from_parts(1, Direction::In)), 32, 1);
-    let ep_out = alt.endpoint_interrupt_out(Some(EndpointAddress::from_parts(1, Direction::Out)), 32, 8);
+    alt.descriptor(0x21, &GAMEPAD_DESC);
+    let ep_in = alt.endpoint_interrupt_in(ep(1, Direction::In), 32, 1);
+    let ep_out = alt.endpoint_interrupt_out(ep(2, Direction::Out), 32, 8);
+    // 1: audio (unserviced)
+    let mut iface = func.interface();
+    let mut alt = iface.alt_setting(0xFF, 0x5D, 0x03, None);
+    alt.descriptor(0x21, &AUDIO_DESC);
+    let _ = alt.endpoint_interrupt_in(ep(3, Direction::In), 32, 2);
+    let _ = alt.endpoint_interrupt_out(ep(4, Direction::Out), 32, 4);
+    let _ = alt.endpoint_interrupt_in(ep(5, Direction::In), 32, 64);
+    let _ = alt.endpoint_interrupt_out(ep(6, Direction::Out), 32, 16);
+    // 2: plugin module (unserviced)
+    let mut iface = func.interface();
+    let mut alt = iface.alt_setting(0xFF, 0x5D, 0x02, None);
+    alt.descriptor(0x21, &PLUGIN_DESC);
+    let _ = alt.endpoint_interrupt_in(ep(6, Direction::In), 32, 16);
+    // 3: security (no endpoints)
+    let mut iface = func.interface();
+    let mut alt = iface.alt_setting(0xFF, 0xFD, 0x13, None);
+    alt.descriptor(0x41, &SECURITY_DESC);
     Endpoints { ep_in, ep_out }
 }
 

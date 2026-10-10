@@ -1,82 +1,103 @@
 # Quest Touch Dongle
 
-Use original **Oculus Quest 1 Touch controllers** as a normal USB gamepad — no headset, no phone, no PC software.
+Use original **Oculus Quest 1 Touch controllers** as a normal gamepad — no headset, no phone.
 A $10 **Nordic nRF52840 Dongle** speaks the controllers' own 2.4 GHz radio protocol, so they connect to it the way
-they would to a Quest, and it shows up on your computer as one combined Xbox-style controller with rumble.
+they would to a Quest, and your computer sees one combined controller with rumble (and gyro in DS4 mode).
 
-> Not affiliated with, endorsed by, or supported by Meta. "Oculus", "Quest" and "Touch" are Meta trademarks, used
-> here only to say which hardware this works with.
+> Not affiliated with, endorsed by, or supported by Meta, Sony or Microsoft. "Oculus", "Quest" and "Touch" are Meta
+> trademarks, used here only to say which hardware this works with.
 
 ## Features
 - Both controllers as **one gamepad**: left = left stick, X/Y, LT, grip → LB, menu → Start; right = right stick, A/B,
-  RT, grip → RB, Oculus → Guide. Stick clicks → LS/RS.
-- **Rumble** in both controllers (HID output report).
-- **Standalone**: the pairing lives in the dongle; plug it in and turn the controllers on. Works on macOS (and anything
-  that accepts a generic HID gamepad: Steam, SDL games, DirectInput on Windows).
-- **Power off** the controllers (they have no off switch): hold **Oculus or Menu for 3 s** → short buzz → put them down
-  and they switch off once still; they wake when picked up. (Power-off after 10 min idle or when the computer
+  RT, grip → RB, Oculus → Guide; stick clicks → LS/RS. One controller alone works as a mini gamepad.
+- Three USB modes (switch from the app, or hold the dongle's button 3 s):
+  | mode | LED | best for |
+  |---|---|---|
+  | **HID gamepad** | green | anything; Steam asks you to set up the layout once |
+  | **DS4** (PlayStation 4 controller) | blue | **Steam**, SDL games, macOS, Linux: no setup, **gyro**, rumble, battery |
+  | **XInput** (Xbox 360 controller) | purple | Windows games without Steam; also Linux and macOS |
+- **Rumble** in both controllers, a short buzz when one connects, and a buzz when a battery runs low.
+- **Pair from the dongle's button**, no computer needed. The pairing is stored on the dongle.
+- **Power off** (Quest controllers have no off switch): hold **Oculus or Menu for 3 s** → short buzz → put them down
+  and they switch off once still; they wake when picked up. (Switching off after 10 min idle and when the computer
   sleeps is implemented but not yet verified.)
-- Host tools for monitoring, the controllers' debug log, and register access.
+- A small **control panel app** for pairing, modes, settings, battery, test buzz and firmware updates.
 
-Tested with controller firmware **app 1.17.2 / bootloader 1.13.0** on macOS.
+Tested with controller firmware app 1.17.2 / bootloader 1.13.0 on macOS (all modes) and Windows (HID mode with
+Steam); DS4 and XInput modes on Windows are not yet verified.
 
-## Hardware
-- Nordic **nRF52840 Dongle (PCA10059)** with its stock Open USB DFU bootloader.
+## What you need
+- A Nordic **nRF52840 Dongle (PCA10059)**.
 - Quest 1 Touch controllers (one AA each).
+- For the control panel: **Python 3** (from [python.org](https://www.python.org/downloads/); it includes Tk).
+  Nothing else to install.
 
 ## Setup
+Download the latest release zip and unzip it.
+
+**1. Install the firmware** (once). Open the control panel (**double-click `Quest Dongle.pyw`** on Windows,
+**`Quest Dongle.command`** on macOS, or run `python3 host/gui.py`), click **Install / update firmware...**, pick
+`quest-dongle.bin`, then press the dongle's small **sideways RESET button** (the red LED pulses) and click OK.
+Later updates need no button.
+
+**2. Pair each controller** (once each). Tap the dongle's button (its LED blinks blue) — or click **Pair a
+controller** in the app — then hold **Oculus + Y** (left) or **Oculus + B** (right) until the controller's LED
+blinks. The dongle flashes green and the controller buzzes when it's done.
+
+**3. Play.** Turn the controllers on (press a button); they connect within a second or two.
+
+**Back up your pairing** from the app (*Back up pairing...*): a new firmware install through the RESET button can
+erase it, and restoring it saves re-pairing. Keep the file private; it is your controllers' key.
+
+## The dongle's LED and button
+| LED | meaning |
+|---|---|
+| green / blue / purple, solid | HID / DS4 / XInput mode, controller connected |
+| same colour, slow blink | waiting for controllers |
+| fast blue blink | pairing |
+| red | not paired yet |
+| three green / red flashes | pairing worked / failed |
+
+Button: **tap** = pair a controller (tap again to cancel) · **hold 3 s** = next mode (HID → DS4 → XInput) ·
+**hold 10 s** = forget the pairing.
+
+In **XInput mode** the control panel can't reach the dongle (Windows' Xbox driver owns it); hold the button 3 s to
+switch to HID mode first.
+
+## Settings (control panel)
+Stick deadzone, how hard to squeeze a grip for LB/RB, idle power-off time, the power-off hold time, low-battery
+warning level, buzz strength, LED brightness, connect buzz, one-controller mini pad, power-off when the computer
+sleeps, and which controller's gyro DS4 mode uses.
+
+## For developers
 Requirements: Rust (stable) with the `thumbv7em-none-eabihf` target, and Python 3.
 
 ```sh
 rustup target add thumbv7em-none-eabihf
-python3 -m venv host/.venv && host/.venv/bin/pip install -r host/requirements.txt
+firmware/flash.sh            # build + flash (in place; --dfu for the RESET-button bootloader)
+tools/package.sh             # build the release zip into dist/
 ```
 
-**1. First flash** (once): press the dongle's sideways **RESET** button (the red LED pulses), then
-
-```sh
-firmware/flash.sh --dfu
-```
-
-Later flashes need no button: `firmware/flash.sh` updates the running firmware in place.
-
-**2. Pair each controller** (once per controller). Hold **Oculus + Y** (left) or **Oculus + B** (right) until the
-LED blinks, then
-
-```sh
-host/.venv/bin/python host/dm.py pair
-```
-
-This generates your own network id + link key in `host/pairing.json` (keep it private), writes it to the
-controller, and saves it on the dongle. Repeat for the other controller.
-
-**3. Play.** Turn the controllers on; they connect within a second or two.
-
-## Host tools (`host/`)
-| tool | what it does |
-|---|---|
-| `link.py --watch` | live panel of every input, IMU, battery, link stats |
-| `link.py --log` | the controllers' own debug log (it rides along in every packet) |
-| `rumble.py L R [s]` | test rumble through the HID gamepad |
-| `regs.py scan left` | read the controller's registers (versions, battery voltage, IMU config, …) |
-| `dm.py info` | device-management info for a controller in pairing mode |
-
-Avoid writing register `0x13` (clears the controller's pairing) and `0x1c` (radio test mode until reset).
+Command-line tools in `host/` (they use the bundled pySerial; `pip install -r host/requirements.txt` for hidapi):
+`link.py --watch` (live inputs, IMU, battery, link stats), `link.py --log` (the controllers' own debug log),
+`regs.py scan left` (controller registers), `rumble.py L R [s]`, `dm.py info|pair`.
+Avoid writing controller register `0x13` (clears its pairing) and `0x1c` (radio test mode until reset).
 
 ## How it works
 The controllers talk a proprietary protocol ("Pulsar"): a 2 Mbit nRF radio link with a 2 ms beacon from the host,
 BLE-style channel hopping, per-controller time slots and AES-CCM-encrypted uplinks. Pairing uses the controllers'
-own device-management mode to install a network id and key that we generate. The full write-up of the protocol,
-the dongle internals and everything verified on hardware is in **[NOTES.md](NOTES.md)**; ideas for what's next are
-in [IDEAS.md](IDEAS.md).
+own device-management mode to install a network id and key that the dongle generates. The protocol write-up and
+everything verified on hardware is in **[NOTES.md](NOTES.md)**; ideas for what's next are in [IDEAS.md](IDEAS.md).
 
 `research/tools` and `research/ghidra/scripts` contain the analysis helpers used. The firmware images they were run
-on (from Meta's Quest 1 OTA) are not included; obtain them yourself if you want to reproduce the research.
+on (from Meta's Quest 1 OTA) are not included.
 
-## Status / limitations
-- USB id is currently the pid.codes **test** PID `1209:0001`; a proper PID is still to be requested.
-- No XInput mode yet (Windows XInput games, rumble on Linux); no gyro aim yet. See the Open list in NOTES.md.
+## Limitations
+- HID mode uses the pid.codes **test** USB id `1209:0001` until a proper one is assigned.
+- Gyro orientation was measured on the right controller; using the left one's gyro is unverified.
 - Only Quest 1 Touch controllers have been tested.
 
 ## License
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT), at your option.
+Includes pySerial (BSD-3-Clause, `host/vendor/serial/LICENSE.txt`) and USB descriptors adapted from GP2040-CE (MIT,
+noted in `firmware/src/ds4.rs` and `firmware/src/xinput.rs`).
