@@ -1,5 +1,5 @@
 #!/bin/sh
-# Double-click on macOS to open the Quest Touch Dongle control panel.
+# Double-click on macOS to open the QuestPad control panel.
 # Uses a Python with a working Tk (python.org or Homebrew); Apple's built-in Python ships an old Tk
 # that hangs on current macOS.
 cd "$(dirname "$0")"
@@ -11,4 +11,4 @@ for py in host/.venv/bin/python /Library/Frameworks/Python.framework/Versions/Cu
         exec "$py" host/gui.py
     fi
 done
-osascript -e 'display alert "Quest Touch Dongle needs Python" message "Install Python 3 from python.org (it includes Tk), then open this again."'
+osascript -e 'display alert "QuestPad needs Python" message "Install Python 3 from python.org (it includes Tk), then open this again."'

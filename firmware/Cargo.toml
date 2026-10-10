@@ -1,5 +1,5 @@
 [package]
-name = "quest-dongle"
+name = "questpad"
 version = "1.0.0"
 license = "MIT OR Apache-2.0"
 description = "nRF52840 dongle that hosts Quest 1 Touch controllers and presents them as a USB gamepad"

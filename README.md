@@ -1,6 +1,6 @@
-# Quest Touch Dongle
+# QuestPad
 
-Use original **Oculus Quest 1 Touch controllers** as a normal gamepad — no headset, no phone.
+Use **Meta Quest Touch controllers** as a normal gamepad — no headset, no phone. Quest 1 controllers work today.
 A $10 **Nordic nRF52840 Dongle** speaks the controllers' own 2.4 GHz radio protocol, so they connect to it the way
 they would to a Quest, and your computer sees one combined controller with rumble (and gyro in DS4 mode).
 
@@ -23,8 +23,15 @@ they would to a Quest, and your computer sees one combined controller with rumbl
   sleeps is implemented but not yet verified.)
 - A small **control panel app** for pairing, modes, settings, battery, test buzz and firmware updates.
 
-Tested with controller firmware app 1.17.2 / bootloader 1.13.0 on macOS (all modes) and Windows (HID mode with
-Steam); DS4 and XInput modes on Windows are not yet verified.
+## Supported controllers
+| controller | status | notes |
+|---|---|---|
+| **Quest 1** Touch | ✅ working | Tested with controller firmware app 1.17.2 / bootloader 1.13.0, on macOS (all modes) and Windows (HID mode with Steam; DS4 / XInput on Windows not yet verified). |
+| **Quest 2** Touch | ❔ untested | Probably a close relative of the same radio protocol, but newer controllers appear to use a key-exchange based pairing that Quest 1 controllers don't, so pairing would need that added. |
+| **Quest 3 / 3S** Touch Plus | ❔ untested | Nothing known yet. |
+
+Contributions that make QuestPad work with more controllers are very welcome — see [NOTES.md](NOTES.md) for the
+protocol and the tools used to map it.
 
 ## What you need
 - A Nordic **nRF52840 Dongle (PCA10059)**.
@@ -35,9 +42,9 @@ Steam); DS4 and XInput modes on Windows are not yet verified.
 ## Setup
 Download the latest release zip and unzip it.
 
-**1. Install the firmware** (once). Open the control panel (**double-click `Quest Dongle.pyw`** on Windows,
-**`Quest Dongle.command`** on macOS, or run `python3 host/gui.py`), click **Install / update firmware...**, pick
-`quest-dongle.bin`, then press the dongle's small **sideways RESET button** (the red LED pulses) and click OK.
+**1. Install the firmware** (once). Open the control panel (**double-click `QuestPad.pyw`** on Windows,
+**`QuestPad.command`** on macOS, or run `python3 host/gui.py`), click **Install / update firmware...**, pick
+`questpad.bin`, then press the dongle's small **sideways RESET button** (the red LED pulses) and click OK.
 Later updates need no button.
 
 **2. Pair each controller** (once each). Tap the dongle's button (its LED blinks blue) — or click **Pair a

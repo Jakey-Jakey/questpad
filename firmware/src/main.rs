@@ -36,7 +36,7 @@ bind_interrupts!(struct Irqs {
 
 type UsbDriver = Driver<'static, HardwareVbusDetect>;
 
-const VERSION: &[u8] = b"quest-dongle 1.0.0";
+const VERSION: &[u8] = b"questpad 1.0.0";
 
 // Host -> dongle commands.
 const CMD_POKE: u8 = 0x01; // addr u32, val u32
@@ -505,15 +505,15 @@ async fn main(spawner: Spawner) {
 
     let driver = Driver::new(p.USBD, Irqs, HardwareVbusDetect::new(Irqs));
     let (vid, pid, product) = match mode {
-        settings::Mode::Ds4 => (ds4::VID, ds4::PID, "Quest Touch Dongle (DS4 mode)"),
-        settings::Mode::XInput => (xinput::VID, xinput::PID, "Quest Touch Dongle (XInput mode)"),
-        settings::Mode::Hid => (0x1209, 0x0001, "Quest Controller Dongle"),
+        settings::Mode::Ds4 => (ds4::VID, ds4::PID, "QuestPad (DS4 mode)"),
+        settings::Mode::XInput => (xinput::VID, xinput::PID, "QuestPad (XInput mode)"),
+        settings::Mode::Hid => (0x1209, 0x0001, "QuestPad"),
     };
     let mut ucfg = embassy_usb::Config::new(vid, pid);
     if mode == settings::Mode::XInput {
         xinput::configure(&mut ucfg);
     }
-    ucfg.manufacturer = Some("Quest Touch Dongle");
+    ucfg.manufacturer = Some("QuestPad");
     ucfg.product = Some(product);
     ucfg.serial_number = Some("QCD-0001");
     ucfg.max_power = 100;

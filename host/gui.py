@@ -1,7 +1,7 @@
-"""Quest Touch Dongle control panel: pairing, mode, settings, controller status, firmware.
+"""QuestPad control panel: pairing, mode, settings, controller status, firmware.
 
 Run it with any Python 3 that has Tkinter (python.org installers do):
-    python3 host/gui.py          (or double-click "Quest Dongle.pyw" / "Quest Dongle.command")
+    python3 host/gui.py          (or double-click "QuestPad.pyw" / "QuestPad.command")
 Needs nothing else: pySerial is bundled in host/vendor.
 """
 import json
@@ -26,9 +26,9 @@ from bridge import Bridge  # noqa: E402
 from mapping import LOG_ITEM_LEN, Hand  # noqa: E402
 
 FIRMWARE_CANDIDATES = [
-    os.path.join(ROOT, "quest-dongle.bin"),
-    os.path.join(ROOT, "firmware", "quest-dongle.bin"),
-    os.path.join(ROOT, "firmware", "target", "quest-dongle.bin"),
+    os.path.join(ROOT, "questpad.bin"),
+    os.path.join(ROOT, "firmware", "questpad.bin"),
+    os.path.join(ROOT, "firmware", "target", "questpad.bin"),
 ]
 MODE_HELP = {
     0: "HID gamepad: works everywhere; Steam asks you to set up the layout once.",
@@ -128,7 +128,7 @@ class Worker(threading.Thread):
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("Quest Touch Dongle")
+        root.title("QuestPad")
         root.minsize(560, 0)
         self.events = queue.Queue()
         self.worker = Worker(self.events)
@@ -259,7 +259,7 @@ class App:
             inputs.set("")
 
     def _on_error(self, text):
-        messagebox.showerror("Quest Touch Dongle", text)
+        messagebox.showerror("QuestPad", text)
 
     def _on_call(self, data):
         fn, value = data
@@ -310,7 +310,7 @@ class App:
 
     def _need(self):
         if not self.connected:
-            messagebox.showinfo("Quest Touch Dongle", "The dongle isn't connected.")
+            messagebox.showinfo("QuestPad", "The dongle isn't connected.")
             return False
         return True
 
@@ -339,15 +339,15 @@ class App:
 
         def save(p):
             if p is None:
-                messagebox.showinfo("Quest Touch Dongle", "Nothing to back up: the dongle isn't paired yet.")
+                messagebox.showinfo("QuestPad", "Nothing to back up: the dongle isn't paired yet.")
                 return
             path = filedialog.asksaveasfilename(title="Save pairing backup", defaultextension=".json",
-                                                initialfile="quest-dongle-pairing.json",
+                                                initialfile="questpad-pairing.json",
                                                 filetypes=[("JSON", "*.json")])
             if path:
                 with open(path, "w") as fh:
                     json.dump({"network_id": p[0], "link_key": p[1], "controllers": {}}, fh, indent=2)
-                messagebox.showinfo("Quest Touch Dongle", "Saved. Keep this file private: it is your controllers' "
+                messagebox.showinfo("QuestPad", "Saved. Keep this file private: it is your controllers' "
                                     "key.")
         self.worker.call(lambda b: b.pair_export(), save)
 
@@ -362,10 +362,10 @@ class App:
             net, key = int(p["network_id"]), bytes.fromhex(p["link_key"])
             assert len(key) == 16
         except Exception as e:
-            messagebox.showerror("Quest Touch Dongle", f"Not a pairing backup: {e}")
+            messagebox.showerror("QuestPad", f"Not a pairing backup: {e}")
             return
         self.worker.call(lambda b: b.pair_store(net, key),
-                         lambda ok: messagebox.showinfo("Quest Touch Dongle", "Pairing restored." if ok
+                         lambda ok: messagebox.showinfo("QuestPad", "Pairing restored." if ok
                                                         else "Restoring failed."))
 
     def _forget(self):
@@ -404,7 +404,7 @@ class App:
         try:
             new = dict(self.settings, **{k: int(v.get()) for k, v in self.vars.items()})
         except (tk.TclError, ValueError):
-            messagebox.showerror("Quest Touch Dongle", "Settings must be whole numbers.")
+            messagebox.showerror("QuestPad", "Settings must be whole numbers.")
             return
 
         def done(ok):
@@ -412,12 +412,12 @@ class App:
                 self.settings = new
                 self.status_var.set("Settings saved.")
             else:
-                messagebox.showerror("Quest Touch Dongle", "The dongle didn't accept the settings.")
+                messagebox.showerror("QuestPad", "The dongle didn't accept the settings.")
         self.worker.call(lambda b: b.settings_set(new), done)
 
     def _update_firmware(self):
         initial = next((p for p in FIRMWARE_CANDIDATES if os.path.exists(p)), None)
-        path = filedialog.askopenfilename(title="Choose firmware (quest-dongle.bin)",
+        path = filedialog.askopenfilename(title="Choose firmware (questpad.bin)",
                                           initialdir=os.path.dirname(initial) if initial else ROOT,
                                           initialfile=os.path.basename(initial) if initial else "",
                                           filetypes=[("Firmware", "*.bin")])

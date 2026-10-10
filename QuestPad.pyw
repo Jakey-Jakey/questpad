@@ -1,4 +1,4 @@
-# Double-click to open the Quest Touch Dongle control panel (Windows: runs with pythonw, no console).
+# Double-click to open the QuestPad control panel (Windows: runs with pythonw, no console).
 import os
 import runpy
 import sys
@@ -11,8 +11,8 @@ try:
 except SystemExit as e:
     if e.code not in (None, 0):
         import tkinter.messagebox
-        tkinter.messagebox.showerror("Quest Touch Dongle", str(e.code))
+        tkinter.messagebox.showerror("QuestPad", str(e.code))
 except Exception:
     # No console under pythonw: show what went wrong instead of silently exiting.
     import tkinter.messagebox
-    tkinter.messagebox.showerror("Quest Touch Dongle", traceback.format_exc())
+    tkinter.messagebox.showerror("QuestPad", traceback.format_exc())
