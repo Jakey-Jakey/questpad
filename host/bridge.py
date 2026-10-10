@@ -9,6 +9,9 @@ RADIO = 0x40001000
 FREQUENCY, TXPOWER, MODE, PCNF0, PCNF1 = 0x508, 0x50C, 0x510, 0x514, 0x518
 BASE0, BASE1, PREFIX0, PREFIX1, TXADDRESS, RXADDRESSES = 0x51C, 0x520, 0x524, 0x528, 0x52C, 0x530
 
+# USB ids the dongle firmware uses: HID mode, DS4 mode (XInput mode has no serial port).
+DONGLE_IDS = {(0x1209, 0x0001), (0x054C, 0x09CC)}
+
 ADV_BASE = 0xFACEB00C
 ADV_PREFIX = 0xAA
 ADV_FREQ = 2  # 2402 MHz
@@ -54,7 +57,7 @@ class Bridge:
     def __init__(self, port=None):
         if port is None:
             for p in serial.tools.list_ports.comports():
-                if p.vid == 0x1209 and p.pid == 0x0001:
+                if (p.vid, p.pid) in DONGLE_IDS:
                     port = p.device
         if port is None:
             raise SystemExit("dongle bridge firmware not found (flash it with firmware/flash.sh)")
@@ -223,3 +226,42 @@ class Bridge:
         self.send(b"\x27")
         f = self._wait(0xA5)
         return {("right" if f[i + 1] else "left"): f[i] for i in range(1, len(f), 10)}
+
+    # ---- settings / pairing / status (firmware 1.0) ----
+    SETTINGS = ("mode", "deadzone_pct", "grip_pct", "idle_min", "off_hold_s", "connect_buzz", "low_batt_pct",
+                "single_mode", "gyro_left", "buzz_amp", "led_level", "off_on_suspend", "imu_map_x", "imu_map_y",
+                "imu_map_z")
+    MODES = ("HID", "DS4", "XInput")
+    PAIR_STATES = ("idle", "waiting", "writing", "done", "failed", "timed out", "cancelled")
+
+    def settings_get(self):
+        self.send(b"\x29")
+        return dict(zip(self.SETTINGS, self._wait(0xA6)[1:]))
+
+    def settings_set(self, values, persist=True):
+        """Write settings (dict as from settings_get). Persisting a new mode reboots the dongle
+        into it (no reply; reconnect afterwards). Returns True on success."""
+        reboot = persist and values["mode"] != self.settings_get()["mode"]
+        self.send(bytes([0x2A] + [int(values[k]) & 0xFF for k in self.SETTINGS] + [int(persist)]))
+        return True if reboot else bool(self._wait(0xF0, timeout=2.0)[2])
+
+    def status(self):
+        """-> dict(mode, paired, pair_state, controllers=[(slot, 'left'/'right', battery or None)])."""
+        self.send(b"\x2e")
+        f = self._wait(0xA9)
+        ctl = [(f[i], "right" if f[i + 1] else "left", None if f[i + 2] == 255 else f[i + 2])
+               for i in range(5, 5 + 3 * f[4], 3)]
+        return dict(mode=self.MODES[f[1]] if f[1] < 3 else f[1], paired=bool(f[2]),
+                    pair_state=self.PAIR_STATES[f[3]] if f[3] < 7 else f[3], controllers=ctl)
+
+    def pair_start(self):
+        """Pair a controller from the dongle (or cancel pairing). Progress arrives as 0xA7 frames."""
+        self.send(b"\x2b")
+
+    def pair_export(self):
+        self.send(b"\x2c")
+        f = self._wait(0xA8)
+        return (struct.unpack_from("<I", f, 2)[0], f[6:22].hex()) if f[1] else None
+
+    def pair_forget(self):
+        self.send(b"\x2d")

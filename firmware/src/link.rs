@@ -60,9 +60,10 @@ const REG_HAPTIC: u8 = 0x97;
 pub const DL_MAX: usize = 32;
 /// Controller register: power off (system off; wakes on motion / button), any data.
 const REG_POWER_OFF: u8 = 0x05;
-/// Confirmation buzz (power-off gesture): length in frames, amplitude.
+/// Feedback buzz lengths (frames of 2 ms): power-off gesture, connect, low battery.
 const BUZZ_FRAMES: u32 = 100;
-const BUZZ_AMP: u8 = 200;
+const CONNECT_BUZZ_FRAMES: u32 = 60;
+const LOW_BATT_BUZZ_FRAMES: u32 = 400;
 /// Beacons a request is repeated for without an echo before giving up (1 s; a controller in
 /// standby rarely transmits, so its echo is slow).
 const DL_TRIES: u16 = 500;
@@ -372,7 +373,7 @@ fn next_downlink(l: &mut Link) -> Option<(usize, Down)> {
         }
         if slot.pending.is_none() {
             let buzzing = (slot.buzz_until.wrapping_sub(frame) as i32) > 0;
-            let want = if buzzing { BUZZ_AMP } else { rumble[slot.right as usize] };
+            let want = if buzzing { crate::settings::get().buzz_amp } else { rumble[slot.right as usize] };
             let mut next = slot.custom.take();
             if next.is_none() && want != slot.haptic_done {
                 let mut d = Down { reg: REG_HAPTIC, read: false, len: 1, data: [0; DL_MAX], seq: 0, tries: 0, haptic: Some(want) };
@@ -622,6 +623,9 @@ fn uplink(l: &mut Link, job: Job, mic_ok: bool) {
                 l.stats.joins += 1;
                 crate::gamepad::link_join(s, dev_type);
                 crate::gamepad::power_reset(s, l.frame);
+                if crate::settings::get().connect_buzz {
+                    l.slots[s as usize].buzz_until = l.frame.wrapping_add(CONNECT_BUZZ_FRAMES);
+                }
                 let _ = EVENTS.try_send(Event::LinkJoin { slot: s, id, dev_type });
             }
         }
@@ -655,6 +659,9 @@ fn uplink(l: &mut Link, job: Job, mic_ok: bool) {
                 }
             }
             crate::gamepad::PowerAction::OffThis => queue_power_off(&mut l.slots[slot as usize]),
+            crate::gamepad::PowerAction::LowBattery => {
+                l.slots[slot as usize].buzz_until = l.frame.wrapping_add(LOW_BATT_BUZZ_FRAMES);
+            }
             crate::gamepad::PowerAction::None => {}
         }
     }

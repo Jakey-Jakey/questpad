@@ -35,6 +35,45 @@ fn checksum(w: &[u32]) -> u32 {
     w.iter().fold(0x811C_9DC5u32, |h, &x| (h ^ x).wrapping_mul(0x0100_0193))
 }
 
+/// A fresh network: random id (radio-address friendly) and random 128-bit key, from the hardware RNG.
+pub fn generate() -> Pairing {
+    let mut key = [0u8; 16];
+    for b in key.iter_mut() {
+        *b = rng_byte();
+    }
+    loop {
+        let id = u32::from_le_bytes([rng_byte(), rng_byte(), rng_byte(), rng_byte()]);
+        // Nordic guidance for radio addresses: plenty of bit transitions, no long runs.
+        let transitions = (id ^ (id >> 1)) & 0x7FFF_FFFF;
+        let has_run = (0..27).any(|i| (id >> i) & 0x3F == 0 || (id >> i) & 0x3F == 0x3F);
+        if transitions.count_ones() >= 10 && !has_run && id != crate::radio::ADV_BASE {
+            return Pairing { network_id: id, key };
+        }
+    }
+}
+
+fn rng_byte() -> u8 {
+    const RNG: u32 = 0x4000_D000;
+    unsafe {
+        write_volatile((RNG + 0x504) as *mut u32, 1); // CONFIG: bias correction
+        write_volatile((RNG + 0x100) as *mut u32, 0); // EVENTS_VALRDY
+        write_volatile(RNG as *mut u32, 1); // TASKS_START
+        while read_volatile((RNG + 0x100) as *const u32) == 0 {}
+        write_volatile((RNG + 0x004) as *mut u32, 1); // TASKS_STOP
+        read_volatile((RNG + 0x508) as *const u32) as u8
+    }
+}
+
+/// Erase the stored pairing (the controllers then need pairing again).
+pub fn forget() {
+    critical_section::with(|_| unsafe {
+        write_volatile(NVMC_CONFIG as *mut u32, 2);
+        write_volatile(NVMC_ERASEPAGE as *mut u32, PAGE);
+        wait_ready();
+        write_volatile(NVMC_CONFIG as *mut u32, 0);
+    });
+}
+
 pub fn load() -> Option<Pairing> {
     let mut w = [0u32; WORDS];
     for (i, x) in w.iter_mut().enumerate() {

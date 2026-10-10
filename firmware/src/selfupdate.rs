@@ -66,6 +66,9 @@ unsafe fn ram_flash(src: *const u32, words: usize) -> ! {
     const NVMC_CONFIG: *mut u32 = 0x4001_E504 as *mut u32;
     const NVMC_ERASEPAGE: *mut u32 = 0x4001_E508 as *mut u32;
     const AIRCR: *mut u32 = 0xE000_ED0C as *mut u32;
+    // The watchdog keeps running while we flash with interrupts off: feed it (crate::wdt).
+    const WDT_RR0: *mut u32 = 0x4001_0600 as *mut u32;
+    const WDT_RELOAD: u32 = 0x6E52_4635;
 
     let end = APP_START + (words as u32) * 4;
     let mut page = APP_START;
@@ -74,6 +77,7 @@ unsafe fn ram_flash(src: *const u32, words: usize) -> ! {
         while read_volatile(NVMC_READY) == 0 {}
         write_volatile(NVMC_ERASEPAGE, page);
         while read_volatile(NVMC_READY) == 0 {}
+        write_volatile(WDT_RR0, WDT_RELOAD);
         page += 4096;
     }
     write_volatile(NVMC_CONFIG, 1); // write enable
@@ -81,6 +85,9 @@ unsafe fn ram_flash(src: *const u32, words: usize) -> ! {
     while i < words {
         write_volatile((APP_START + 4 * i as u32) as *mut u32, read_volatile(src.add(i)));
         while read_volatile(NVMC_READY) == 0 {}
+        if i % 1024 == 0 {
+            write_volatile(WDT_RR0, WDT_RELOAD);
+        }
         i += 1;
     }
     write_volatile(NVMC_CONFIG, 0);

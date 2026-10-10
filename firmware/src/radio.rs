@@ -121,9 +121,15 @@ pub enum Event {
     LinkDrop { slot: u8 },
     /// Decrypted uplink payload (starting at its slot byte); `mic_ok` false = raw ciphertext.
     LinkData { slot: u8, rssi: u8, mic_ok: bool, data: heapless::Vec<u8, BUF_LEN> },
+    /// Pairing progress (ui::PairState as u8).
+    PairStatus(u8),
 }
 
 pub static EVENTS: Channel<CriticalSectionRawMutex, Event, 24> = Channel::new();
+
+/// DM link state / responses for firmware-driven pairing (the host gets the same via EVENTS).
+pub static DM_LINK: embassy_sync::signal::Signal<CriticalSectionRawMutex, bool> = embassy_sync::signal::Signal::new();
+pub static DM_RESP: embassy_sync::signal::Signal<CriticalSectionRawMutex, u8> = embassy_sync::signal::Signal::new();
 
 /// Where the LENGTH byte sits in the RAM buffer, and how many bytes precede the payload.
 /// Defaults match PCNF0 = 0x00100108: [S0][LEN][S1][payload].
@@ -438,6 +444,7 @@ fn dm_on_end(e: &mut Engine, phase: DmPhase, t_end: u32, crc_ok: bool, buf: &[u8
             e.dm.pending = false;
             e.dm.misses = 0;
             set_addr(id0, DM_PREFIX, DM_FREQ);
+            DM_LINK.signal(true);
             let _ = EVENTS.try_send(Event::DmLink { connected: true, id0, id1 });
             // The controller listens 900..2000 us after its advertisement; syncboss TXes at +1000.
             dm_schedule_tx(e, t_end.wrapping_add(1000));
@@ -462,6 +469,7 @@ fn dm_on_end(e: &mut Engine, phase: DmPhase, t_end: u32, crc_ok: bool, buf: &[u8
                         e.dm.pending = false;
                         let mut data = heapless::Vec::new();
                         let _ = data.extend_from_slice(&buf[3..1 + len]);
+                        DM_RESP.signal(hdr);
                         let _ = EVENTS.try_send(Event::DmResp { hdr, seq, data });
                     }
                 }
@@ -483,6 +491,7 @@ fn dm_on_timer(e: &mut Engine, phase: DmPhase) {
             radio_off();
             e.dm.misses += 1;
             if e.dm.misses > DM_MAX_MISSES {
+                DM_LINK.signal(false);
                 let _ = EVENTS.try_send(Event::DmLink { connected: false, id0: e.dm.id0, id1: e.dm.id1 });
                 dm_scan(e);
             } else {
