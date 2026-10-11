@@ -36,7 +36,7 @@ bind_interrupts!(struct Irqs {
 
 type UsbDriver = Driver<'static, HardwareVbusDetect>;
 
-const VERSION: &[u8] = b"questpad 1.0.1";
+const VERSION: &[u8] = b"questpad 1.0.2";
 
 // Host -> dongle commands.
 const CMD_POKE: u8 = 0x01; // addr u32, val u32
@@ -504,16 +504,17 @@ async fn main(spawner: Spawner) {
     spawner.spawn(wdt::task().unwrap());
 
     let driver = Driver::new(p.USBD, Irqs, HardwareVbusDetect::new(Irqs));
-    let (vid, pid, product) = match mode {
-        settings::Mode::Ds4 => (ds4::VID, ds4::PID, "QuestPad (DS4 mode)"),
-        settings::Mode::XInput => (xinput::VID, xinput::PID, "QuestPad (XInput mode)"),
-        settings::Mode::Hid => (0x1209, 0x5151, "QuestPad"),
+    // DS4 mode copies a real DS4's strings: some games (e.g. InControl's Unity profiles) match on the name.
+    let (vid, pid, manufacturer, product) = match mode {
+        settings::Mode::Ds4 => (ds4::VID, ds4::PID, "Sony Interactive Entertainment", "Wireless Controller"),
+        settings::Mode::XInput => (xinput::VID, xinput::PID, "QuestPad", "QuestPad (XInput mode)"),
+        settings::Mode::Hid => (0x1209, 0x5151, "QuestPad", "QuestPad"),
     };
     let mut ucfg = embassy_usb::Config::new(vid, pid);
     if mode == settings::Mode::XInput {
         xinput::configure(&mut ucfg);
     }
-    ucfg.manufacturer = Some("QuestPad");
+    ucfg.manufacturer = Some(manufacturer);
     ucfg.product = Some(product);
     ucfg.serial_number = Some("QCD-0001");
     ucfg.max_power = 100;
