@@ -16,6 +16,7 @@ Quest controllers work with headsets over a private 2.4 GHz radio link. QuestPad
 ## Features
 - **Both controllers as one gamepad**, laid out like an Xbox pad, and one controller alone works as a mini gamepad.
 - **Three USB modes**: generic gamepad, PlayStation 4 controller, or Xbox 360 controller (XInput games on Windows).
+- **Gyro with touch-to-aim** (DS4 mode): rest your thumb on the controller to aim, lift it to re-centre.
 - **Rumble**, plus small buzzes when a controller connects and when its battery runs low.
 - **Pair with one button press** on the dongle; no computer needed. 
 - **An off switch the controllers never had**: hold Oculus or Menu for 3 s, put them down, and they switch off after about a second.
@@ -60,10 +61,15 @@ Reinstalling the firmware through the RESET button can erase the pairing, and th
 
 ## Using QuestPad
 **Button layout.** Left: stick, X / Y, trigger → LT, grip → LB, Menu → Start, stick click → LS. Right: stick, A / B,
-trigger → RT, grip → RB, Oculus → Guide, stick click → RS. In DS4 mode a thumb resting on a controller (on or right at its
-face buttons or stick) touches that half of the touchpad, so in Steam Input you can set **Gyro Activation** to right pad
-touch: aim while your thumb is down, lift it to re-centre. The panel picks which sensors count for each
-thumb (face buttons and / or stick); with both thumbs down only the gyro controller's touches (two-finger touch is an option).
+trigger → RT, grip → RB, Oculus → Guide, stick click → RS.
+
+**Gyro and touch.** In DS4 mode the dongle sends the gyro of one controller (right by default) and turns each
+thumb into a touch on its half of the DS4 touchpad. Games with built-in gyro use it directly. Anything that can
+switch gyro on with a touchpad touch, like Steam Input, can turn it into touch-to-aim.
+
+In the control panel you choose which buttons sense your thumb (face buttons and / or stick), how long a lift takes
+to count (150 ms by default, to ride out sensor dropouts), and whether both thumbs at once is a two-finger touch.
+By default only the gyro controller's thumb counts, so the other thumb never interrupts aiming.
 
 **Modes.**
 | mode | LED | use it for |
