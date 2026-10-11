@@ -148,7 +148,7 @@ class App:
         self._show_settings(dict(mode=1, deadzone_pct=3, grip_pct=50, idle_min=10, off_hold_s=3, connect_buzz=1,
                                  low_batt_pct=10, single_mode=1, gyro_left=0, buzz_amp=200, led_level=40,
                                  off_on_suspend=1, imu_map_x=0, imu_map_y=0x82, imu_map_z=1, touch_left=7,
-                                 touch_right=7, touch_both=0, touch_hold_10ms=15))
+                                 touch_right=7, touch_both=0, touch_hold_10ms=15, touch_pct=60))
         self._on_status(dict(mode="DS4", paired=True, pair_state="idle",
                              controllers=[(1, "left", 100), (2, "right", 80)]))
         self.ctl_rows["left"][2].set(".Y.. stick  +12, +71  trig   0  grip  86")
@@ -237,10 +237,11 @@ class App:
         check(5, 0, "off_on_suspend", "Turn controllers off when the computer sleeps")
         check(5, 2, "gyro_left", "Gyro from the LEFT controller (DS4)")
 
-        # DS4 touchpad: which touch sensors put each thumb on its half of the pad (bits 0 X/A, 1 Y/B, 2 stick).
+        # DS4 touchpad: which touch sensors put each thumb on its half of the pad (bits 0 X/A, 1 Y/B, 2 stick,
+        # 3 trigger).
         self.touch_vars = {}
-        for row, key, side, names in ((6, "touch_left", "Left", ("X", "Y", "stick")),
-                                      (7, "touch_right", "Right", ("A", "B", "stick"))):
+        for row, key, side, names in ((6, "touch_left", "Left", ("X", "Y", "stick", "trigger")),
+                                      (7, "touch_right", "Right", ("A", "B", "stick", "trigger"))):
             ttk.Label(st, text=f"{side} thumb touches the pad (DS4) on").grid(row=row, column=0, sticky="w")
             boxes = ttk.Frame(st)
             boxes.grid(row=row, column=1, columnspan=3, sticky="w")
@@ -250,7 +251,8 @@ class App:
                 self.touch_vars[key, bit] = v
         check(8, 0, "touch_both", "Both thumbs down = two-finger touch (DS4)")
         spin(8, 2, "touch_hold_ms", "Thumb lift delay (ms)", 0, 1000, step=10)
-        ttk.Button(st, text="Save settings", command=self._save_settings).grid(row=9, column=0, sticky="w",
+        spin(9, 0, "touch_pct", "Touch threshold % (lower = more sensitive)", 25, 200, step=5)
+        ttk.Button(st, text="Save settings", command=self._save_settings).grid(row=10, column=0, sticky="w",
                                                                                 pady=(6, 0))
 
         # Firmware
@@ -304,7 +306,13 @@ class App:
             if slot not in self.hands or self.hands[slot][0] != side:
                 self.hands[slot] = (side, Hand())
             state, batt, _ = self.ctl_rows[side]
-            state.set(f"connected ({battery}%)" if battery is not None else "connected")
+            flags = st.get("flags", {}).get(slot, 0)
+            text = f"connected ({battery}%)" if battery is not None else "connected"
+            if flags & Bridge.STATUS_DEAD_BATTERY:
+                text = "battery dead, turning off"
+            elif flags & Bridge.STATUS_STANDBY:
+                text += ", standby"
+            state.set(text)
             batt["value"] = battery or 0
         for side, (state, batt, inputs) in self.ctl_rows.items():
             if side not in seen:

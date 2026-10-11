@@ -662,6 +662,13 @@ fn uplink(l: &mut Link, job: Job, mic_ok: bool) {
             crate::gamepad::PowerAction::LowBattery => {
                 l.slots[slot as usize].buzz_until = l.frame.wrapping_add(LOW_BATT_BUZZ_FRAMES);
             }
+            crate::gamepad::PowerAction::DeadBattery => {
+                for s in 1..SLOTS {
+                    if s != slot as usize && l.slots[s].used {
+                        l.slots[s].buzz_until = l.frame.wrapping_add(LOW_BATT_BUZZ_FRAMES);
+                    }
+                }
+            }
             crate::gamepad::PowerAction::None => {}
         }
     }

@@ -67,8 +67,10 @@ trigger → RT, grip → RB, Oculus → Guide, stick click → RS.
 thumb into a touch on its half of the DS4 touchpad. Games with built-in gyro use it directly. Anything that can
 switch gyro on with a touchpad touch, like Steam Input, can turn it into touch-to-aim.
 
-In the control panel you choose which buttons sense your thumb (face buttons and / or stick), how long a lift takes
-to count (150 ms by default, to ride out sensor dropouts), and whether both thumbs at once is a two-finger touch.
+In the control panel you choose which sensors count as your thumb (face buttons, stick and / or trigger, so a
+finger resting on the trigger can switch gyro on), how sensitive they are (touch threshold: 60 % by default, which
+also catches a thumb on the rest; raise it to need a real touch), how long a lift takes to count (150 ms by
+default, to ride out sensor dropouts), and whether both thumbs at once is a two-finger touch.
 By default only the gyro controller's thumb counts, so the other thumb never interrupts aiming.
 
 **Modes.**
@@ -99,7 +101,8 @@ Pick one up (or press a button) to wake it.
 **Settings** (control panel): stick deadzone, grip strength that counts as LB / RB, idle time before switching off,
 the hold time for the off gesture, low-battery warning level, buzz strength, dongle LED brightness, connect buzz,
 one-controller mini pad, switch-off on computer sleep, which controller's gyro DS4 mode uses, and the DS4 touchpad
-thumb sensors and lift delay.
+thumb sensors, touch threshold and lift delay. A controller whose battery dies buzzes the other one as it
+switches off.
 
 ## Troubleshooting
 **Steam asks me to set up the controller.** That's the generic gamepad mode. Switch to DS4 mode and Steam

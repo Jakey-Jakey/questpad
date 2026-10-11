@@ -131,7 +131,9 @@ Each **entry** is `[id:5 | len_lo:3 << 5] [len_hi:4 | seq:3 << 4 | last << 7] [d
 | 3 | trigger, grip: two 12-bit values packed in 3 bytes, inverted (4095 = released, 0 = fully squeezed) |
 | 4 | buttons: bit 0 X / A, bit 1 Y / B, bit 2 stick click, bit 3 Menu / Oculus (bit 4 is always set) |
 | 5 | capacitive touch: 0x01 X / A, 0x02 Y / B, 0x04 stick, 0x08 trigger (finger on it); 0x10 / 0x20 / 0x40 / 0x80 = finger near the same four |
-| 6, 7 | not yet known |
+| 5 thresholds | the controller sets touch above 25 / 20 / 45 / 100 and near above 18 / 15 / 25 / 50 (X / A, Y / B, stick, trigger) on the raw levels in id 7 |
+| 6 | status flags, sent when the controller changes state: 0x01 dead battery (it shuts down right after), 0x10 standby (register 0x06) |
+| 7 | raw touch levels, 4 × u8 (X / A, Y / B, stick, trigger), clamped to 0..255; ~0 untouched, ~200 for a finger on the trigger, 30..60 hovering |
 
 **IMU orientation** (right controller, held naturally): −Z points up and −Y points forward, so for a DS4-style frame
 (x right, y up, z toward you) DS4 x = +X, y = −Z, z = +Y.

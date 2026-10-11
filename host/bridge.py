@@ -244,8 +244,10 @@ class Bridge:
     SETTINGS = ("mode", "deadzone_pct", "grip_pct", "idle_min", "off_hold_s", "connect_buzz", "low_batt_pct",
                 "single_mode", "gyro_left", "buzz_amp", "led_level", "off_on_suspend", "imu_map_x", "imu_map_y",
                 "imu_map_z", "touch_left", "touch_right", "touch_both",
-                "touch_hold_10ms")  # touch_*: firmware 1.1.0+
+                "touch_hold_10ms",  # touch_*: firmware 1.1.0+
+                "touch_pct")  # 1.2.0+
     MODES = ("HID", "DS4", "XInput")
+    STATUS_DEAD_BATTERY, STATUS_STANDBY = 0x01, 0x10  # controller status flags (status()["flags"])
     PAIR_STATES = ("idle", "waiting", "writing", "done", "failed", "timed out", "cancelled")
 
     def settings_get(self):
@@ -261,13 +263,16 @@ class Bridge:
         return True if reboot else bool(self._wait(0xF0, timeout=2.0)[2])
 
     def status(self):
-        """-> dict(mode, paired, pair_state, controllers=[(slot, 'left'/'right', battery or None)])."""
+        """-> dict(mode, paired, pair_state, controllers=[(slot, 'left'/'right', battery or None)],
+        flags={slot: controller status flags (STATUS_*)}; flags is empty before firmware 1.2.0)."""
         self.send(b"\x2e")
         f = self._wait(0xA9)
+        n = f[4]
         ctl = [(f[i], "right" if f[i + 1] else "left", None if f[i + 2] == 255 else f[i + 2])
-               for i in range(5, 5 + 3 * f[4], 3)]
+               for i in range(5, 5 + 3 * n, 3)]
+        flags = dict(zip((c[0] for c in ctl), f[5 + 3 * n : 5 + 4 * n])) if len(f) >= 5 + 4 * n else {}
         return dict(mode=self.MODES[f[1]] if f[1] < 3 else f[1], paired=bool(f[2]),
-                    pair_state=self.PAIR_STATES[f[3]] if f[3] < 7 else f[3], controllers=ctl)
+                    pair_state=self.PAIR_STATES[f[3]] if f[3] < 7 else f[3], controllers=ctl, flags=flags)
 
     def pair_start(self):
         """Pair a controller from the dongle (or cancel pairing). Progress arrives as 0xA7 frames."""

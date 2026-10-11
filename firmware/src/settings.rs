@@ -11,7 +11,7 @@ const MAGIC: u32 = 0x3253_5051; // "QPS2": [magic][length][data words][checksum]
 const MAGIC_V1: u32 = 0x3153_5051; // "QPS1"
 /// Longest record `load` accepts (a later firmware's layout; extra bytes are ignored).
 const MAX_LEN: usize = 64;
-pub const LEN: usize = 19;
+pub const LEN: usize = 20;
 /// Older layouts, still read from flash: 15 bytes (1.0.x, no touchpad settings) and 18 (a 1.1.0
 /// pre-release).
 /// Shorter records (over USB too) get defaults for the missing settings.
@@ -75,7 +75,7 @@ pub struct Settings {
     /// source axis, bit 7 = negate.
     pub imu_map: [u8; 3],
     /// DS4 touchpad: which touch sensors put the left / right thumb on its half of the touchpad.
-    /// Bits 0 X / A, 1 Y / B, 2 stick (0 = never).
+    /// Bits 0 X / A, 1 Y / B, 2 stick, 3 trigger (0 = never).
     pub touch_left: u8,
     pub touch_right: u8,
     /// Both thumbs down = a two-finger touch. Off: only the gyro controller's thumb is reported.
@@ -83,6 +83,9 @@ pub struct Settings {
     /// A thumb still counts as down this long after leaving the sensors (10 ms units): they drop
     /// out briefly while the thumb shifts during play, which would pause pad-touch gyro.
     pub touch_hold_10ms: u8,
+    /// Touch threshold for those sensors, % of the controller's own touch level (25..200; lower =
+    /// more sensitive). 60 is about its "near" level, which catches a thumb on the rest.
+    pub touch_pct: u8,
 }
 
 pub const DEFAULT: Settings = Settings {
@@ -105,6 +108,7 @@ pub const DEFAULT: Settings = Settings {
     touch_right: 0x07,
     touch_both: false,
     touch_hold_10ms: 15,
+    touch_pct: 60,
 };
 
 impl Settings {
@@ -129,6 +133,7 @@ impl Settings {
             self.touch_right,
             self.touch_both as u8,
             self.touch_hold_10ms,
+            self.touch_pct,
         ]
     }
 
@@ -155,10 +160,11 @@ impl Settings {
             led_level: b[10],
             off_on_suspend: b[11] != 0,
             imu_map: [b[12] & 0x83, b[13] & 0x83, b[14] & 0x83],
-            touch_left: b[15] & 0x07,
-            touch_right: b[16] & 0x07,
+            touch_left: b[15] & 0x0F,
+            touch_right: b[16] & 0x0F,
             touch_both: b[17] != 0,
             touch_hold_10ms: b[18],
+            touch_pct: b[19].clamp(25, 200),
         })
     }
 }

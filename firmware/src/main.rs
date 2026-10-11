@@ -36,7 +36,7 @@ bind_interrupts!(struct Irqs {
 
 type UsbDriver = Driver<'static, HardwareVbusDetect>;
 
-const VERSION: &[u8] = b"questpad 1.1.0";
+const VERSION: &[u8] = b"questpad 1.2.0";
 
 // Host -> dongle commands.
 const CMD_POKE: u8 = 0x01; // addr u32, val u32
@@ -88,7 +88,7 @@ const EV_LINK_SLOTS: u8 = 0xA5; // n x (slot u8, right u8, device_id [8])
 const EV_SETTINGS: u8 = 0xA6; // settings [settings::LEN]
 const EV_PAIR_STATUS: u8 = 0xA7; // ui::PairState u8
 const EV_PAIR_EXPORT: u8 = 0xA8; // stored u8, network_id u32, link_key [16]
-const EV_STATUS: u8 = 0xA9; // mode u8, paired u8, pair_state u8, n u8, n x (slot u8, right u8, battery u8 (255 = unknown))
+const EV_STATUS: u8 = 0xA9; // mode u8, paired u8, pair_state u8, n u8, n x (slot u8, right u8, battery u8 (255 = unknown)), n x status flags u8 (1.2.0+)
 const EV_FW: u8 = 0xF0; // cmd u8, ok u8
 
 #[panic_handler]
@@ -350,11 +350,15 @@ fn handle(cmd: &[u8], out: &mut [u8]) -> usize {
             let slots = link::slots();
             out[4] = slots.len() as u8;
             let mut n = 5;
-            for (slot, right, _) in slots {
+            for &(slot, right, _) in &slots {
                 out[n] = slot;
                 out[n + 1] = right as u8;
                 out[n + 2] = gamepad::battery(slot).unwrap_or(255);
                 n += 3;
+            }
+            for &(slot, _, _) in &slots {
+                out[n] = gamepad::status(slot);
+                n += 1;
             }
             return n;
         }
