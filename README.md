@@ -119,9 +119,11 @@ pair it again. After a firmware reinstall, use **Restore pairing…** or re-pair
 starts pulsing), then try again.
 
 ## For developers
-You need Rust (stable) with the `thumbv7em-none-eabihf` target, and Python 3.
+You need Rust (stable) with the `thumbv7em-none-eabihf` target and `llvm-tools`, and Python 3. On Windows, run the
+scripts from Git Bash.
 ```sh
 rustup target add thumbv7em-none-eabihf
+rustup component add llvm-tools
 firmware/flash.sh            # build and flash in place (add --dfu for the RESET-button bootloader)
 tools/package.sh             # build the release zip into dist/
 ```

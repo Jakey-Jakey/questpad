@@ -17,5 +17,13 @@ cp host/*.py host/requirements.txt "dist/$NAME/host/"
 cp -R host/vendor "dist/$NAME/host/vendor"
 find "dist/$NAME" -name __pycache__ -prune -exec rm -rf {} +
 rm -f "dist/$NAME/host/pairing.json"
-(cd dist && rm -f "$NAME.zip" && zip -qr "$NAME.zip" "$NAME")
+# zip if installed (Git Bash on Windows has none), else Python's zipfile.
+cd dist && rm -f "$NAME.zip"
+if command -v zip >/dev/null; then
+    zip -qr "$NAME.zip" "$NAME"
+else
+    for PY in python3 python; do "$PY" -c "" 2>/dev/null && break; done
+    "$PY" -m zipfile -c "$NAME.zip" "$NAME"
+fi
+cd ..
 echo "dist/$NAME.zip"
