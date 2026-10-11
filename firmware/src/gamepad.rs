@@ -330,13 +330,15 @@ fn left_to_right_frame(v: [i16; 3]) -> [i16; 3] {
     [v[1].saturating_neg(), v[0], v[2]]
 }
 
-fn axis(v: i16, invert: bool, deadzone: i32) -> i16 {
-    let v = v as i32;
-    if v.abs() < deadzone {
-        return 0;
+/// Radial deadzone, rescaled so output starts at 0 at its edge. Flips y to HID (+y down).
+fn stick((x, y): (i16, i16), deadzone: i32) -> (i16, i16) {
+    let (x, y, dz, full) = (x as i64, -(y as i64), deadzone as i64, STICK_FULL as i64);
+    let r = (x * x + y * y).isqrt();
+    if r <= dz {
+        return (0, 0);
     }
-    let v = (v * 32767 / STICK_FULL).clamp(-32767, 32767);
-    (if invert { -v } else { v }) as i16
+    let scale = |v: i64| (v * 32767 * (r.min(full) - dz) / ((full - dz) * r)) as i16;
+    (scale(x), scale(y))
 }
 
 fn trigger(raw: u16) -> u8 {
@@ -355,7 +357,7 @@ fn build() -> Pad {
     for (slot, h) in hands().iter().enumerate() {
         let Some(side) = h.side else { continue };
         let b = h.buttons;
-        let (x, y) = (axis(h.stick.0, false, deadzone), axis(h.stick.1, true, deadzone));
+        let (x, y) = stick(h.stick, deadzone);
         if connected == 1 && s.single_mode {
             // Mini pad: stick = left stick, face = A / B, trigger = RT, grip = LT, menu = Start.
             for (bit, out) in [(0x01, BTN_A), (0x02, BTN_B), (0x04, BTN_LS), (0x08, BTN_START)] {
