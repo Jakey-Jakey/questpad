@@ -6,8 +6,16 @@ use core::ptr::{read_volatile, write_volatile};
 use critical_section::Mutex;
 
 const PAGE: u32 = 0xDE000;
-const MAGIC: u32 = 0x3153_5051; // "QPS1"
-pub const LEN: usize = 15;
+const MAGIC: u32 = 0x3253_5051; // "QPS2": [magic][length][data words][checksum]
+/// Firmware before 1.1.0: [magic][data words][checksum], `OLD_LENS` bytes (distinct word counts).
+const MAGIC_V1: u32 = 0x3153_5051; // "QPS1"
+/// Longest record `load` accepts (a later firmware's layout; extra bytes are ignored).
+const MAX_LEN: usize = 64;
+pub const LEN: usize = 19;
+/// Older layouts, still read from flash: 15 bytes (1.0.x, no touchpad settings) and 18 (a 1.1.0
+/// pre-release).
+/// Shorter records (over USB too) get defaults for the missing settings.
+const OLD_LENS: [usize; 2] = [18, 15];
 
 const NVMC_READY: u32 = 0x4001_E400;
 const NVMC_CONFIG: u32 = 0x4001_E504;
@@ -66,6 +74,15 @@ pub struct Settings {
     /// Controller IMU -> DS4 axes, for gyro x / y / z (accel uses the same map): bits 0..1 =
     /// source axis, bit 7 = negate.
     pub imu_map: [u8; 3],
+    /// DS4 touchpad: which touch sensors put the left / right thumb on its half of the touchpad.
+    /// Bits 0 X / A, 1 Y / B, 2 stick (0 = never).
+    pub touch_left: u8,
+    pub touch_right: u8,
+    /// Both thumbs down = a two-finger touch. Off: only the gyro controller's thumb is reported.
+    pub touch_both: bool,
+    /// A thumb still counts as down this long after leaving the sensors (10 ms units): they drop
+    /// out briefly while the thumb shifts during play, which would pause pad-touch gyro.
+    pub touch_hold_10ms: u8,
 }
 
 pub const DEFAULT: Settings = Settings {
@@ -84,6 +101,10 @@ pub const DEFAULT: Settings = Settings {
     // Measured on the right controller (PROTOCOL.md): held naturally, Touch -Z is up and -Y points
     // forward, so DS4 x = +X, y = -Z, z = +Y.
     imu_map: [0x00, 0x82, 0x01],
+    touch_left: 0x07,
+    touch_right: 0x07,
+    touch_both: false,
+    touch_hold_10ms: 15,
 };
 
 impl Settings {
@@ -104,13 +125,22 @@ impl Settings {
             self.imu_map[0],
             self.imu_map[1],
             self.imu_map[2],
+            self.touch_left,
+            self.touch_right,
+            self.touch_both as u8,
+            self.touch_hold_10ms,
         ]
     }
 
+    /// Parse `LEN` bytes, or an older (shorter) layout with defaults for the rest.
     pub fn from_bytes(b: &[u8]) -> Option<Settings> {
-        if b.len() < LEN {
+        if b.len() < OLD_LENS[OLD_LENS.len() - 1] {
             return None;
         }
+        let mut full = DEFAULT.to_bytes();
+        let n = b.len().min(LEN);
+        full[..n].copy_from_slice(&b[..n]);
+        let b = &full;
         Some(Settings {
             mode: Mode::from(b[0]),
             deadzone_pct: b[1].min(50),
@@ -125,6 +155,10 @@ impl Settings {
             led_level: b[10],
             off_on_suspend: b[11] != 0,
             imu_map: [b[12] & 0x83, b[13] & 0x83, b[14] & 0x83],
+            touch_left: b[15] & 0x07,
+            touch_right: b[16] & 0x07,
+            touch_both: b[17] != 0,
+            touch_hold_10ms: b[18],
         })
     }
 }
@@ -139,37 +173,58 @@ fn checksum(w: &[u32]) -> u32 {
     w.iter().fold(0x811C_9DC5u32, |h, &x| (h ^ x).wrapping_mul(0x0100_0193))
 }
 
-/// Flash layout: [magic][data words][checksum].
 const DATA_WORDS: usize = (LEN + 3) / 4;
-const WORDS: usize = DATA_WORDS + 2;
+const WORDS: usize = DATA_WORDS + 3;
 
 fn pack(s: &Settings) -> [u32; WORDS] {
     let mut w = [0u32; WORDS];
     w[0] = MAGIC;
+    w[1] = LEN as u32;
     for (i, chunk) in s.to_bytes().chunks(4).enumerate() {
         let mut x = [0u8; 4];
         x[..chunk.len()].copy_from_slice(chunk);
-        w[1 + i] = u32::from_le_bytes(x);
+        w[2 + i] = u32::from_le_bytes(x);
     }
     w[WORDS - 1] = checksum(&w[..WORDS - 1]);
     w
 }
 
+fn flash_word(i: usize) -> u32 {
+    unsafe { read_volatile((PAGE + 4 * i as u32) as *const u32) }
+}
+
+/// The data bytes of a valid record: `magic`, `header` words in all, `data_words`, checksum.
+fn record(magic: u32, header: usize, data_words: usize) -> Option<[u8; MAX_LEN]> {
+    let mut w = [0u32; MAX_LEN / 4 + 3];
+    let w = &mut w[..header + data_words + 1];
+    for (i, x) in w.iter_mut().enumerate() {
+        *x = flash_word(i);
+    }
+    let last = w.len() - 1;
+    if w[0] != magic || w[last] != checksum(&w[..last]) {
+        return None;
+    }
+    let mut b = [0u8; MAX_LEN];
+    for i in 0..data_words {
+        b[4 * i..4 * i + 4].copy_from_slice(&w[header + i].to_le_bytes());
+    }
+    Some(b)
+}
+
+fn stored() -> Option<Settings> {
+    if flash_word(0) == MAGIC {
+        let len = flash_word(1) as usize;
+        if !(1..=MAX_LEN).contains(&len) {
+            return None;
+        }
+        return Settings::from_bytes(&record(MAGIC, 2, (len + 3) / 4)?[..len]);
+    }
+    OLD_LENS.iter().find_map(|&len| Settings::from_bytes(&record(MAGIC_V1, 1, (len + 3) / 4)?[..len]))
+}
+
 /// Load settings from flash into RAM (defaults if the page is blank or corrupt).
 pub fn load() -> Settings {
-    let mut w = [0u32; WORDS];
-    for (i, x) in w.iter_mut().enumerate() {
-        *x = unsafe { read_volatile((PAGE + 4 * i as u32) as *const u32) };
-    }
-    let s = if w[0] == MAGIC && w[WORDS - 1] == checksum(&w[..WORDS - 1]) {
-        let mut b = [0u8; 4 * DATA_WORDS];
-        for i in 0..DATA_WORDS {
-            b[4 * i..4 * i + 4].copy_from_slice(&w[1 + i].to_le_bytes());
-        }
-        Settings::from_bytes(&b).unwrap_or(DEFAULT)
-    } else {
-        DEFAULT
-    };
+    let s = stored().unwrap_or(DEFAULT);
     critical_section::with(|cs| CURRENT.borrow(cs).set(s));
     s
 }

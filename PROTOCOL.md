@@ -130,7 +130,7 @@ Each **entry** is `[id:5 | len_lo:3 << 5] [len_hi:4 | seq:3 << 4 | last << 7] [d
 | 2 | thumbstick x, y (i16; +x right, +y up; exactly 0, 0 at rest, already calibrated) |
 | 3 | trigger, grip: two 12-bit values packed in 3 bytes, inverted (4095 = released, 0 = fully squeezed) |
 | 4 | buttons: bit 0 X / A, bit 1 Y / B, bit 2 stick click, bit 3 Menu / Oculus (bit 4 is always set) |
-| 5 | capacitive touch: 0x01 X / A, 0x02 Y / B, 0x04 stick, other bits not yet mapped |
+| 5 | capacitive touch: 0x01 X / A, 0x02 Y / B, 0x04 stick, 0x08 trigger (finger on it); 0x10 / 0x20 / 0x40 / 0x80 = finger near the same four |
 | 6, 7 | not yet known |
 
 **IMU orientation** (right controller, held naturally): −Z points up and −Y points forward, so for a DS4-style frame

@@ -60,7 +60,10 @@ Reinstalling the firmware through the RESET button can erase the pairing, and th
 
 ## Using QuestPad
 **Button layout.** Left: stick, X / Y, trigger → LT, grip → LB, Menu → Start, stick click → LS. Right: stick, A / B,
-trigger → RT, grip → RB, Oculus → Guide, stick click → RS.
+trigger → RT, grip → RB, Oculus → Guide, stick click → RS. In DS4 mode a thumb resting on a controller (on or right at its
+face buttons or stick) touches that half of the touchpad, so in Steam Input you can set **Gyro Activation** to right pad
+touch: aim while your thumb is down, lift it to re-centre. The panel picks which sensors count for each
+thumb (face buttons and / or stick); with both thumbs down only the gyro controller's touches (two-finger touch is an option).
 
 **Modes.**
 | mode | LED | use it for |
@@ -89,7 +92,8 @@ Pick one up (or press a button) to wake it.
 
 **Settings** (control panel): stick deadzone, grip strength that counts as LB / RB, idle time before switching off,
 the hold time for the off gesture, low-battery warning level, buzz strength, dongle LED brightness, connect buzz,
-one-controller mini pad, switch-off on computer sleep, and which controller's gyro DS4 mode uses.
+one-controller mini pad, switch-off on computer sleep, which controller's gyro DS4 mode uses, and the DS4 touchpad
+thumb sensors and lift delay.
 
 ## Troubleshooting
 **Steam asks me to set up the controller.** That's the generic gamepad mode. Switch to DS4 mode and Steam

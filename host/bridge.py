@@ -243,7 +243,8 @@ class Bridge:
     # ---- settings / pairing / status (firmware 1.0) ----
     SETTINGS = ("mode", "deadzone_pct", "grip_pct", "idle_min", "off_hold_s", "connect_buzz", "low_batt_pct",
                 "single_mode", "gyro_left", "buzz_amp", "led_level", "off_on_suspend", "imu_map_x", "imu_map_y",
-                "imu_map_z")
+                "imu_map_z", "touch_left", "touch_right", "touch_both",
+                "touch_hold_10ms")  # touch_*: firmware 1.1.0+
     MODES = ("HID", "DS4", "XInput")
     PAIR_STATES = ("idle", "waiting", "writing", "done", "failed", "timed out", "cancelled")
 
@@ -254,8 +255,9 @@ class Bridge:
     def settings_set(self, values, persist=True):
         """Write settings (dict as from settings_get). Persisting a new mode reboots the dongle
         into it (no reply; reconnect afterwards). Returns True on success."""
-        reboot = persist and values["mode"] != self.settings_get()["mode"]
-        self.send(bytes([0x2A] + [int(values[k]) & 0xFF for k in self.SETTINGS] + [int(persist)]))
+        cur = self.settings_get()  # older firmware has fewer settings: send only the ones it has
+        reboot = persist and values["mode"] != cur["mode"]
+        self.send(bytes([0x2A] + [int(values[k]) & 0xFF for k in self.SETTINGS if k in cur] + [int(persist)]))
         return True if reboot else bool(self._wait(0xF0, timeout=2.0)[2])
 
     def status(self):

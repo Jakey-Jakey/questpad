@@ -6,7 +6,11 @@
 //!   1..5 LX LY RX RY u8 (128 = centre), 5 hat | Square Cross Circle Triangle, 6 L1 R1 L2 R2
 //!   Share Options L3 R3, 7 PS | Touchpad | counter << 2, 8 L2, 9 R2, 10..12 sensor timestamp
 //!   (5.33 µs), 12 temperature, 13..19 gyro xyz, 19..25 accel xyz, 30 battery (level 0..10,
-//!   bit 4 = cable), 33.. touch reports (none: "not touching" bit set).
+//!   bit 4 = cable), 33 touch report count, 34 touch counter, 35..39 / 39..43 fingers ([7] lifted,
+//!   [6:0] tracking id, 12-bit x, 12-bit y; pad 1920 x 942).
+//! A thumb resting on a controller is a finger on that half of the touchpad, so Steam Input's
+//! left / right pad touch (e.g. gyro activation) follows each thumb. Unless `touch_both` is on, only
+//! one thumb touches at a time (the gyro controller's wins), so both never read as a whole-pad touch.
 //! Output report 0x05: [4] weak (right) motor, [5] strong (left) motor.
 //!
 //! IMU units: we report gyro at 16 LSB per deg/s and accel at 8192 LSB per g, and the
@@ -300,6 +304,9 @@ const FEATURES: &[(u8, usize)] = &[
 ];
 
 static COUNTER: AtomicU8 = AtomicU8::new(0);
+/// Touchpad: fingers down in the last report, and the tracking id of each finger's latest touch.
+static THUMBS: AtomicU8 = AtomicU8::new(0);
+static TOUCH_ID: [AtomicU8; 2] = [AtomicU8::new(0), AtomicU8::new(0)];
 
 fn stick(v: i16) -> u8 {
     ((v >> 8) + 128) as u8
@@ -357,10 +364,30 @@ pub fn report(p: &Pad) -> [u8; IN_LEN] {
     }
     // Battery: level 0..10, not on a cable (the controllers run on AA cells).
     r[30] = p.battery.map_or(0, |b| (b / 10).min(10));
-    // Touchpad: one (empty) touch report with both fingers lifted.
+    // Touchpad: one touch report, left thumb = finger 0 on the left half, right thumb = finger 1
+    // on the right half (centre of each). A new touch gets a new tracking id.
+    let s = crate::settings::get();
+    let thumbs = if p.thumbs == 3 && !s.touch_both {
+        // The gyro controller's thumb wins, so moving with the other stick never pauses pad-touch gyro.
+        if s.gyro_left { 1 } else { 2 }
+    } else {
+        p.thumbs
+    };
+    let prev = THUMBS.swap(thumbs, Ordering::Relaxed);
     r[33] = 1;
-    r[35] = 0x80;
-    r[39] = 0x80;
+    r[34] = counter;
+    for (i, x) in [(0, 480u16), (1, 1440)] {
+        let down = thumbs >> i & 1 != 0;
+        if down && prev >> i & 1 == 0 {
+            TOUCH_ID[i].fetch_add(1, Ordering::Relaxed);
+        }
+        let f = &mut r[35 + 4 * i..39 + 4 * i];
+        f[0] = TOUCH_ID[i].load(Ordering::Relaxed) & 0x7F | if down { 0 } else { 0x80 };
+        let y = 471u16;
+        f[1] = x as u8;
+        f[2] = (x >> 8) as u8 | (y << 4) as u8;
+        f[3] = (y >> 4) as u8;
+    }
     r
 }
 

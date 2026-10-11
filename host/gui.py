@@ -147,7 +147,8 @@ class App:
         self.connected = True
         self._show_settings(dict(mode=1, deadzone_pct=3, grip_pct=50, idle_min=10, off_hold_s=3, connect_buzz=1,
                                  low_batt_pct=10, single_mode=1, gyro_left=0, buzz_amp=200, led_level=40,
-                                 off_on_suspend=1, imu_map_x=0, imu_map_y=0x82, imu_map_z=1))
+                                 off_on_suspend=1, imu_map_x=0, imu_map_y=0x82, imu_map_z=1, touch_left=7,
+                                 touch_right=7, touch_both=0, touch_hold_10ms=15))
         self._on_status(dict(mode="DS4", paired=True, pair_state="idle",
                              controllers=[(1, "left", 100), (2, "right", 80)]))
         self.ctl_rows["left"][2].set(".Y.. stick  +12, +71  trig   0  grip  86")
@@ -212,10 +213,10 @@ class App:
         st.pack(fill="x", **pad)
         self.vars = {}
 
-        def spin(row, col, key, label, lo, hi):
+        def spin(row, col, key, label, lo, hi, step=1):
             ttk.Label(st, text=label).grid(row=row, column=col, sticky="w")
             v = tk.IntVar()
-            ttk.Spinbox(st, from_=lo, to=hi, textvariable=v, width=5).grid(row=row, column=col + 1, sticky="w",
+            ttk.Spinbox(st, from_=lo, to=hi, increment=step, textvariable=v, width=5).grid(row=row, column=col + 1, sticky="w",
                                                                           padx=(4, 16))
             self.vars[key] = v
 
@@ -235,7 +236,21 @@ class App:
         check(4, 2, "single_mode", "One controller = whole mini gamepad")
         check(5, 0, "off_on_suspend", "Turn controllers off when the computer sleeps")
         check(5, 2, "gyro_left", "Gyro from the LEFT controller (DS4)")
-        ttk.Button(st, text="Save settings", command=self._save_settings).grid(row=6, column=0, sticky="w",
+
+        # DS4 touchpad: which touch sensors put each thumb on its half of the pad (bits 0 X/A, 1 Y/B, 2 stick).
+        self.touch_vars = {}
+        for row, key, side, names in ((6, "touch_left", "Left", ("X", "Y", "stick")),
+                                      (7, "touch_right", "Right", ("A", "B", "stick"))):
+            ttk.Label(st, text=f"{side} thumb touches the pad (DS4) on").grid(row=row, column=0, sticky="w")
+            boxes = ttk.Frame(st)
+            boxes.grid(row=row, column=1, columnspan=3, sticky="w")
+            for bit, name in enumerate(names):
+                v = tk.IntVar()
+                ttk.Checkbutton(boxes, text=name, variable=v).pack(side="left", padx=(4, 8))
+                self.touch_vars[key, bit] = v
+        check(8, 0, "touch_both", "Both thumbs down = two-finger touch (DS4)")
+        spin(8, 2, "touch_hold_ms", "Thumb lift delay (ms)", 0, 1000, step=10)
+        ttk.Button(st, text="Save settings", command=self._save_settings).grid(row=9, column=0, sticky="w",
                                                                                 pady=(6, 0))
 
         # Firmware
@@ -408,7 +423,10 @@ class App:
     def _show_settings(self, s):
         self.settings = s
         for k, v in self.vars.items():
-            v.set(s[k])
+            v.set(s.get(k, 0))
+        self.vars["touch_hold_ms"].set(s.get("touch_hold_10ms", 15) * 10)
+        for (k, bit), v in self.touch_vars.items():
+            v.set(s.get(k, 0x07) >> bit & 1)
         self.mode_var.set(s["mode"])
         self._mode_help()
 
@@ -417,6 +435,9 @@ class App:
             return
         try:
             new = dict(self.settings, **{k: int(v.get()) for k, v in self.vars.items()})
+            new["touch_hold_10ms"] = min(max(round(new.pop("touch_hold_ms") / 10), 0), 255)
+            for (k, bit), v in self.touch_vars.items():
+                new[k] = new.get(k, 0) & ~(1 << bit) | int(v.get()) << bit
         except (tk.TclError, ValueError):
             messagebox.showerror("QuestPad", "Settings must be whole numbers.")
             return

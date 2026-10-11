@@ -4,12 +4,14 @@
 //! Notification ids (verified on air, see PROTOCOL.md): 0 battery %; 1 IMU [ts u48][accel xyz i16
 //! ~1024/g][gyro xyz i16 ~8.2/dps]; 2 stick x,y i16 (+y up, 0,0 at rest: the controllers apply
 //! their own calibration); 3 trigger, grip 12-bit packed, inverted (4095 released); 4 buttons
-//! (bit0 A/X, bit1 B/Y, bit2 stick click, bit3 Oculus/menu); 5 capacitive touch bits.
+//! (bit0 A/X, bit1 B/Y, bit2 stick click, bit3 Oculus/menu); 5 capacitive touch (bits 0..3 on A/X,
+//! B/Y, stick, trigger; bits 4..7 near the same; the thumb rest has no sensor of its own).
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
+use embassy_time::Instant;
 
 use crate::settings;
 
@@ -50,6 +52,8 @@ pub struct Pad {
     pub battery: Option<u8>,
     pub imu: Imu,
     pub connected: u8,
+    /// Thumb down on the sensors chosen in settings (`touch_left` / `touch_right`): bit 0 left, bit 1 right.
+    pub thumbs: u8,
 }
 
 /// Latest pad state for the active USB mode's encoder.
@@ -195,10 +199,28 @@ struct Hand {
     grip: u16,
     battery: Option<u8>,
     imu: Imu,
+    /// When the thumb last left the touchpad sensors (ms since boot), for `touch_hold_10ms`.
+    thumb_off_ms: Option<u64>,
 }
 
-const IDLE: Hand =
-    Hand { side: None, buttons: 0, touch: 0, stick: (0, 0), trigger: 0, grip: 0, battery: None, imu: Imu { accel: [0; 3], gyro: [0; 3], ts: 0 } };
+const IDLE: Hand = Hand {
+    side: None,
+    buttons: 0,
+    touch: 0,
+    stick: (0, 0),
+    trigger: 0,
+    grip: 0,
+    battery: None,
+    imu: Imu { accel: [0; 3], gyro: [0; 3], ts: 0 },
+    thumb_off_ms: None,
+};
+
+/// Touch bits that put `side`'s thumb on the touchpad: the sensors chosen in settings, on or near.
+fn thumb_sensors(side: Side) -> u8 {
+    let s = settings::get();
+    let m = if side == Side::Left { s.touch_left } else { s.touch_right };
+    m | m << 4
+}
 
 /// Per link slot (only touched from the radio-side interrupts, which share one priority).
 static mut HANDS: [Hand; 5] = [IDLE; 5];
@@ -281,8 +303,14 @@ pub fn link_notifications(slot: u8, mut buf: &[u8]) {
                 changed = true;
             }
             5 if len >= 1 => {
+                changed |= h.touch != d[0];
+                if let Some(side) = h.side {
+                    let sensors = thumb_sensors(side);
+                    if h.touch & sensors != 0 && d[0] & sensors == 0 {
+                        h.thumb_off_ms = Some(Instant::now().as_millis());
+                    }
+                }
                 h.touch = d[0];
-                changed |= gyro_source;
             }
             _ => {}
         }
@@ -352,6 +380,11 @@ fn build() -> Pad {
                 p.rx = x;
                 p.ry = y;
             }
+        }
+        let hold_ms = s.touch_hold_10ms as u64 * 10;
+        let held = h.thumb_off_ms.is_some_and(|t| Instant::now().as_millis() - t < hold_ms);
+        if h.touch & thumb_sensors(side) != 0 || held {
+            p.thumbs |= if side == Side::Left { 1 } else { 2 };
         }
         if let Some(bat) = h.battery {
             p.battery = Some(p.battery.map_or(bat, |m| m.min(bat)));

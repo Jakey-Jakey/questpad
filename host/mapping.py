@@ -9,7 +9,7 @@ IDs, verified on air with the left controller (2026-10-10):
     2  thumbstick   x, y i16 (+x right, +y up, full scale ~+-32500); sent as 0,0 when centred
     3  trigger/grip two 12-bit values packed in 3 B, inverted: 4095 released, 0 fully squeezed
     4  buttons u8   bit0 X/A, bit1 Y/B, bit2 stick click, bit3 menu (left; right = Oculus?), bit4 always 1
-    5  touch u8     capacitive bits (0x01 X, 0x02 Y, 0x04 stick, 0x08 trigger?, 0x10/0x20/0x40/0x80 near/rest?)
+    5  touch u8     capacitive bits (0x01 X, 0x02 Y, 0x04 stick, 0x08 trigger; 0x10/0x20/0x40/0x80 near the same)
     0  battery u8   percent
     6 u8, 7 4 B     TBD (7 is noisy, capsense raw?)
 Right-controller bit roles are assumed to mirror the left (A/B/stick/Oculus) until checked.
