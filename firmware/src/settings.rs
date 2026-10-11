@@ -99,7 +99,7 @@ pub const DEFAULT: Settings = Settings {
     led_level: 40,
     off_on_suspend: true,
     // Measured on the right controller (PROTOCOL.md): held naturally, Touch -Z is up and -Y points
-    // forward, so DS4 x = +X, y = -Z, z = +Y.
+    // forward, so DS4 x = +X, y = -Z, z = +Y. Left samples are first turned into these axes (gamepad.rs).
     imu_map: [0x00, 0x82, 0x01],
     touch_left: 0x07,
     touch_right: 0x07,

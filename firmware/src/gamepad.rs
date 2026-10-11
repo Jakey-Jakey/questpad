@@ -277,11 +277,13 @@ pub fn link_notifications(slot: u8, mut buf: &[u8]) {
                 h.battery = Some(d[0].min(100));
             }
             1 if len >= 18 => {
-                h.imu = Imu {
-                    ts: u32::from_le_bytes([d[0], d[1], d[2], d[3]]),
-                    accel: [i16_at(6), i16_at(8), i16_at(10)],
-                    gyro: [i16_at(12), i16_at(14), i16_at(16)],
-                };
+                let mut accel = [i16_at(6), i16_at(8), i16_at(10)];
+                let mut gyro = [i16_at(12), i16_at(14), i16_at(16)];
+                if h.side == Some(Side::Left) {
+                    accel = left_to_right_frame(accel);
+                    gyro = left_to_right_frame(gyro);
+                }
+                h.imu = Imu { ts: u32::from_le_bytes([d[0], d[1], d[2], d[3]]), accel, gyro };
                 if h.imu.gyro.iter().any(|g| (*g as i32).abs() > STILL_GYRO) {
                     activity()[slot].moving = true;
                 }
@@ -319,6 +321,13 @@ pub fn link_notifications(slot: u8, mut buf: &[u8]) {
     if changed {
         publish();
     }
+}
+
+/// The left controller's IMU sits rotated 90° about Z from the right's (measured at rest on a table:
+/// left X = right Y, left Y = -right X). Turn its samples into the right controller's axes so one
+/// `imu_map` (measured on the right) fits both.
+fn left_to_right_frame(v: [i16; 3]) -> [i16; 3] {
+    [v[1].saturating_neg(), v[0], v[2]]
 }
 
 fn axis(v: i16, invert: bool, deadzone: i32) -> i16 {
