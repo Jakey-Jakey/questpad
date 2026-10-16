@@ -17,6 +17,8 @@ Quest controllers work with headsets over a private 2.4 GHz radio link. QuestPad
 - **Both controllers as one gamepad**, laid out like an Xbox pad, and one controller alone works as a mini gamepad.
 - **Three USB modes**: generic gamepad, PlayStation 4 controller, or Xbox 360 controller (XInput games on Windows).
 - **Gyro with touch-to-aim** (DS4 mode): rest your thumb on the controller to aim, lift it to re-centre.
+- **Motion in emulators**: Cemu, Dolphin, Ryujinx and other DSU (Cemuhook) emulators get each controller's gyro and
+  accelerometer from the control panel. [Setup](docs/motion.md).
 - **Rumble**, plus small buzzes when a controller connects and when its battery runs low.
 - **Pair with one button press** on the dongle; no computer needed. 
 - **An off switch the controllers never had**: hold Oculus or Menu for 3 s, put them down, and they switch off after about a second.
@@ -100,8 +102,8 @@ Pick one up (or press a button) to wake it.
 
 **Settings** (control panel): stick deadzone, grip strength that counts as LB / RB, idle time before switching off,
 the hold time for the off gesture, low-battery warning level, buzz strength, dongle LED brightness, connect buzz,
-one-controller mini pad, switch-off on computer sleep, which controller's gyro DS4 mode uses, and the DS4 touchpad
-thumb sensors, touch threshold and lift delay. A controller whose battery dies buzzes the other one as it
+one-controller mini pad, switch-off on computer sleep, which controller's gyro DS4 mode uses (also DSU controller 1
+for emulators), and the DS4 touchpad thumb sensors, touch threshold and lift delay. A controller whose battery dies buzzes the other one as it
 switches off.
 
 ## Troubleshooting
@@ -136,6 +138,8 @@ tools/package.sh             # build the release zip into dist/
 | `firmware/` | dongle firmware (Rust, [embassy](https://embassy.dev)) |
 | `host/gui.py` | control panel (Tkinter; pySerial bundled in `host/vendor`; `--demo` shows sample data) |
 | `host/link.py` | `--watch` live inputs / IMU / battery / link stats, `--log` the controllers' own debug log |
+| `host/dsu.py` | DSU (Cemuhook) motion server: built into the panel, or run on its own |
+| `host/dsu_client.py` | a DSU client like an emulator's: live view, `--guided` direction check, `--selftest` |
 | `host/regs.py` | read and write controller registers |
 | `host/dm.py`, `host/sniff_adv.py` | pairing-mode tools |
 | `research/` | the analysis scripts used to work out the protocol |
