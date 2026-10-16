@@ -13,7 +13,7 @@
 //! one thumb touches at a time (the gyro controller's wins), so both never read as a whole-pad touch.
 //! Output report 0x05: [4] weak (right) motor, [5] strong (left) motor.
 //!
-//! IMU units: we report gyro at 16 LSB per deg/s and accel at 8192 LSB per g, and the
+//! IMU units: we report gyro at 16.384 LSB per deg/s and accel at 8192 LSB per g, and the
 //! calibration feature report (0x02) states exactly that, so hosts scale it correctly.
 
 use core::sync::atomic::{AtomicU8, Ordering};
@@ -318,7 +318,7 @@ fn imu_axes(p: &Pad) -> ([i16; 3], [i16; 3]) {
     let g = p.imu.gyro;
     let a = p.imu.accel;
     let sat = |v: i32| v.clamp(-32768, 32767) as i16;
-    // Touch: ~8.19 LSB/(deg/s) -> 16; ~1024 LSB/g -> 8192.
+    // Touch: 8.192 LSB/(deg/s) -> 16.384; 1024 LSB/g -> 8192.
     let gyro = [sat(g[0] as i32 * 2), sat(g[1] as i32 * 2), sat(g[2] as i32 * 2)];
     let accel = [sat(a[0] as i32 * 8), sat(a[1] as i32 * 8), sat(a[2] as i32 * 8)];
     let m = crate::settings::get().imu_map;
@@ -392,11 +392,11 @@ pub fn report(p: &Pad) -> [u8; IN_LEN] {
 }
 
 /// Calibration (feature 0x02, USB layout: gyro plus / minus interleaved per axis): biases 0,
-/// gyro ±32000 = ±2000 deg/s (16 LSB per deg/s), accel ±8192 = ±1 g.
+/// gyro ±32767 = ±2000 deg/s (16.384 LSB per deg/s), accel ±8192 = ±1 g.
 fn calibration(buf: &mut [u8]) {
     let v: [i16; 17] = [
         0, 0, 0, // pitch, yaw, roll bias
-        32000, -32000, 32000, -32000, 32000, -32000, // pitch +/-, yaw +/-, roll +/-
+        32767, -32767, 32767, -32767, 32767, -32767, // pitch +/-, yaw +/-, roll +/-
         2000, 2000, // gyro speed +/-
         8192, -8192, 8192, -8192, 8192, -8192, // accel x, y, z +/-
     ];
