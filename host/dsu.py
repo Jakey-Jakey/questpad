@@ -44,6 +44,11 @@ MACS = {"left": bytes.fromhex("515000000001"), "right": bytes.fromhex("515000000
 
 # Touch IMU scale (PROTOCOL.md), and the firmware's defaults for the settings used here (settings.rs).
 GYRO_PER_DPS, ACCEL_PER_G = 8.192, 1024.0
+# Gyro resting offset (up to ~1.7 deg/s, the controllers don't remove it): measured whenever a controller lies still,
+# i.e. two 0.5 s blocks in a row in which no gyro axis spreads more than ~2 deg/s (at rest: ~0.5, held: 10 and more),
+# the accelerometer only by its noise, and gravity's average doesn't shift between the blocks.
+REST_SAMPLES, REST_GYRO, REST_ACCEL, REST_SHIFT = 250, 16, 48, 10  # samples; counts (~2 deg/s, ~0.05 g, ~0.01 g)
+MAX_OFFSET = 41  # counts (5 deg/s): anything steadier and larger is a slow turn, not an offset
 STICK_FULL = 32000
 DEFAULTS = dict(deadzone_pct=3, grip_pct=50, single_mode=1, gyro_left=0, imu_map_x=0x00, imu_map_y=0x82,
                 imu_map_z=0x01)
@@ -131,6 +136,36 @@ class Controller:
         self.side, self.hand, self.battery = side, Hand(), None
 
 
+class Rest:
+    """A controller's gyro resting offset, re-measured whenever it lies still (like setting a Wii U GamePad down)."""
+
+    def __init__(self):
+        self.offset = (0.0, 0.0, 0.0)  # gyro counts
+        self.prev = None  # means of the last block, if it was still
+        self._start()
+
+    def _start(self):
+        self.n, self.lo, self.hi, self.sum = 0, [1 << 16] * 6, [-(1 << 16)] * 6, [0] * 6
+
+    def add(self, accel, gyro):
+        for i, v in enumerate((*accel, *gyro)):
+            if v < self.lo[i]:
+                self.lo[i] = v
+            if v > self.hi[i]:
+                self.hi[i] = v
+            self.sum[i] += v
+        self.n += 1
+        if self.n < REST_SAMPLES:
+            return
+        mean = [v / self.n for v in self.sum]
+        spread = [hi - lo for lo, hi in zip(self.lo, self.hi)]
+        still = max(spread[:3]) < REST_ACCEL and max(spread[3:]) < REST_GYRO and max(map(abs, mean[3:])) < MAX_OFFSET
+        if still and self.prev and max(abs(a - b) for a, b in zip(mean[:3], self.prev[:3])) < REST_SHIFT:
+            self.offset = tuple((a + b) / 2 for a, b in zip(mean[3:], self.prev[3:]))
+        self.prev = mean if still else None
+        self._start()
+
+
 class Clock:
     """Motion timestamps for one DSU slot: the controller's own clock (us), kept rising when the slot
     switches controller or a controller restarts (clients drop samples that go back in time)."""
@@ -175,6 +210,7 @@ class Server:
         self.id = random.getrandbits(32)
         self._settings = dict(DEFAULTS)
         self.ctls = {}  # dongle link slot -> Controller
+        self.rest = {"left": Rest(), "right": Rest()}  # per hand, so it outlives rejoins
         self.clients = {}  # address -> Client
         self.clocks = [Clock(), Clock()]
         self.shown = [None, None]  # controller each DSU slot last streamed
@@ -206,6 +242,7 @@ class Server:
                 ts = c.hand.imu_ts
                 c.hand.update(p[3 + LOG_ITEM_LEN :])
                 if c.hand.imu_ts != ts:
+                    self.rest[c.side].add(c.hand.accel, c.hand.gyro)
                     self._stream(c)
             elif kind == 0xA0 and len(f) >= 14:
                 side = SIDES.get(struct.unpack_from("<I", f, 10)[0])
@@ -247,7 +284,8 @@ class Server:
         if not self.clients:
             return
         s = self._settings
-        accel, gyro = motion(c.side, c.hand.accel, c.hand.gyro, (s["imu_map_x"], s["imu_map_y"], s["imu_map_z"]))
+        gyro = [g - o for g, o in zip(c.hand.gyro, self.rest[c.side].offset)]
+        accel, gyro = motion(c.side, c.hand.accel, gyro, (s["imu_map_x"], s["imu_map_y"], s["imu_map_z"]))
         pad = pad_bytes([(x.side, x.hand) for x in self.ctls.values()], s)
         payload = (self._info(i, c) + struct.pack("<BI", 1, 0) + pad
                    + struct.pack("<Q6f", self.clocks[i](c, c.hand.imu_ts), *accel, *gyro))
