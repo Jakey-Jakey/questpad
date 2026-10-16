@@ -187,8 +187,9 @@ Nordic's Open USB DFU bootloader. The `nicenano` cargo feature builds for the ni
 | `main.rs` | USB setup per mode, and the serial protocol the control panel uses (command list at the top) |
 
 **USB modes.** Generic gamepad + serial port (`1209:5151`; firmware 1.0.0 used the pid.codes test id `1209:0001`), DS4 (`054C:09CC`, gamepad + serial port), and XInput
-(`045E:028E`, Xbox 360 interfaces only, so no serial port). DS4 mode reports gyro at 16 per °/s and accel at 8192 per g
-and says so in its calibration report, so hosts scale it correctly. The left controller's IMU is mounted rotated 90°
+(`045E:028E`, Xbox 360 interfaces only, so no serial port). DS4 mode reports gyro at 16.384 per °/s (the controller's
+8.192, doubled) and accel at 8192 per g and says so in its calibration report, so hosts scale it correctly (before 1.3.0
+the report claimed 16 per °/s, so turns read 2.4 % large). The left controller's IMU is mounted rotated 90°
 about Z from the right's (left X = right Y, left Y = −right X, Z the same; measured with both at rest in two poses), so
 the firmware turns left samples into the right controller's axes before applying the `imu_map` setting. It also removes
 each gyro's resting offset (0.3–1.7 °/s per axis; the controllers don't), re-measured whenever a controller lies still
