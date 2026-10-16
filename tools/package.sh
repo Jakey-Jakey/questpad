@@ -10,9 +10,10 @@ NAME=questpad-$VERSION
 OBJCOPY="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/host: //p')/bin/llvm-objcopy"
 "$OBJCOPY" -O binary firmware/target/thumbv7em-none-eabihf/release/questpad firmware/target/questpad.bin
 
-rm -rf "dist/$NAME" && mkdir -p "dist/$NAME/host"
+rm -rf "dist/$NAME" && mkdir -p "dist/$NAME/host" "dist/$NAME/docs"
 cp firmware/target/questpad.bin "dist/$NAME/questpad.bin"
 cp "QuestPad.pyw" "QuestPad.command" README.md LICENSE-MIT LICENSE-APACHE "dist/$NAME/"
+cp docs/motion.md docs/motion-panel.png "dist/$NAME/docs/"
 cp host/*.py host/requirements.txt "dist/$NAME/host/"
 cp -R host/vendor "dist/$NAME/host/vendor"
 find "dist/$NAME" -name __pycache__ -prune -exec rm -rf {} +
