@@ -42,8 +42,7 @@ Contributions that make QuestPad work with more controllers are very welcome. Se
 | Linux | ❔ untested (DS4 mode uses the kernel's `hid-playstation` driver, XInput mode `xpad`) |
 
 ## What you need
-- A **Nordic nRF52840 Dongle** (PCA10059), or a **nice!nano v2** (untested, see
-  [Using a nice!nano](#using-a-nicenano))
+- A **Nordic nRF52840 Dongle** (PCA10059), or a **nice!nano v2** (see [Using a nice!nano](#using-a-nicenano))
 - Your Touch controllers
 - **Python 3** for the control panel
 
@@ -113,8 +112,7 @@ for emulators), and the DS4 touchpad thumb sensors, touch threshold and lift del
 buzzes the other one as it switches off.
 
 ## Using a nice!nano
-QuestPad also builds for the **nice!nano v2** (and boards that share its bootloader). This build hasn't been tried on
-real hardware yet: reports welcome.
+QuestPad also builds for the **nice!nano v2** (and boards that share its bootloader).
 
 **Installing.** Use **`questpad-nicenano.uf2`** instead of `questpad.bin`. The first time, put the board into its
 bootloader by shorting **RST to GND twice quickly**: the blue LED pulses and a drive called **NICENANO** appears.
