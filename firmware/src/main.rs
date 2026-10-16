@@ -1,12 +1,14 @@
 #![no_std]
 #![no_main]
 
+mod board;
 mod cobs;
 mod ds4;
 mod gamepad;
 mod link;
 mod pairing;
 mod radio;
+#[cfg(not(feature = "nicenano"))]
 mod selfupdate;
 mod settings;
 mod ui;
@@ -36,7 +38,10 @@ bind_interrupts!(struct Irqs {
 
 type UsbDriver = Driver<'static, HardwareVbusDetect>;
 
-const VERSION: &[u8] = b"questpad 1.2.0";
+#[cfg(not(feature = "nicenano"))]
+const VERSION: &[u8] = concat!("questpad ", env!("CARGO_PKG_VERSION")).as_bytes();
+#[cfg(feature = "nicenano")]
+const VERSION: &[u8] = concat!("questpad ", env!("CARGO_PKG_VERSION"), " nice!nano").as_bytes();
 
 // Host -> dongle commands.
 const CMD_POKE: u8 = 0x01; // addr u32, val u32
@@ -197,8 +202,8 @@ fn start_stored_link() {
 }
 
 fn enter_dfu() -> ! {
-    // Nordic's Open USB DFU bootloader stays in DFU mode when GPREGRET == 0xB1.
-    radio::poke(0x4000_051C, 0xB1);
+    // GPREGRET: the bootloader stays in update mode after the reset.
+    radio::poke(0x4000_051C, board::DFU_GPREGRET);
     cortex_m::peripheral::SCB::sys_reset()
 }
 
@@ -369,6 +374,10 @@ fn handle(cmd: &[u8], out: &mut [u8]) -> usize {
             return 2;
         }
         CMD_FW_BEGIN | CMD_FW_DATA | CMD_FW_COMMIT if a.len() >= 4 => {
+            // The nice!nano updates through its UF2 bootloader (CMD_DFU) instead.
+            #[cfg(feature = "nicenano")]
+            let ok = false;
+            #[cfg(not(feature = "nicenano"))]
             let ok = match cmd[0] {
                 CMD_FW_BEGIN => selfupdate::begin(rd_u32(a) as usize),
                 CMD_FW_DATA => selfupdate::data(rd_u32(a) as usize, &a[4..]),
@@ -493,16 +502,22 @@ async fn main(spawner: Spawner) {
     radio::init();
     start_stored_link();
 
-    // Front panel: LED2 (RGB, active low) on PWM0 as channels R, G, B, and the SW1 button.
-    // Green / blue pins verified on hardware: P0.12 lights green, P1.09 blue.
+    // Front panel: the status LED on PWM0 (idle = off), and the button.
     let mut pwm_cfg = SimpleConfig::default();
     pwm_cfg.max_duty = 1000;
     pwm_cfg.prescaler = Prescaler::Div16;
-    pwm_cfg.ch0_idle_level = Level::High;
-    pwm_cfg.ch1_idle_level = Level::High;
-    pwm_cfg.ch2_idle_level = Level::High;
+    let off = if board::LED_ACTIVE_LOW { Level::High } else { Level::Low };
+    pwm_cfg.ch0_idle_level = off;
+    pwm_cfg.ch1_idle_level = off;
+    pwm_cfg.ch2_idle_level = off;
+    // Dongle LED2 as channels R, G, B. Green / blue pins verified on hardware: P0.12 lights green,
+    // P1.09 blue.
+    #[cfg(not(feature = "nicenano"))]
     let pwm = SimplePwm::new_3ch(p.PWM0, p.P0_08, p.P0_12, p.P1_09, &pwm_cfg);
+    #[cfg(feature = "nicenano")]
+    let pwm = SimplePwm::new_1ch(p.PWM0, p.P0_15, &pwm_cfg);
     spawner.spawn(ui::led_task(pwm).unwrap());
+    // Dongle SW1; on the nice!nano a header pin, for an optional button to GND.
     spawner.spawn(ui::button_task(Input::new(p.P1_06, Pull::Up)).unwrap());
     spawner.spawn(ui::pair_task().unwrap());
     spawner.spawn(wdt::task().unwrap());

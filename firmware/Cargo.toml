@@ -5,6 +5,10 @@ license = "MIT OR Apache-2.0"
 description = "nRF52840 dongle that hosts Quest 1 Touch controllers and presents them as a USB gamepad"
 edition = "2021"
 
+[features]
+# Board (src/board.rs): the Nordic nRF52840 Dongle (PCA10059) unless this is set.
+nicenano = []
+
 [dependencies]
 embassy-nrf = { version = "0.11.0", features = ["nrf52840", "time-driver-rtc1", "gpiote", "rt"] }
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt"] }

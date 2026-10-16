@@ -40,7 +40,8 @@ Contributions that make QuestPad work with more controllers are very welcome. Se
 | Linux | ❔ untested (DS4 mode uses the kernel's `hid-playstation` driver, XInput mode `xpad`) |
 
 ## What you need
-- A **Nordic nRF52840 Dongle** (PCA10059)
+- A **Nordic nRF52840 Dongle** (PCA10059), or a **nice!nano v2** (untested, see
+  [Using a nice!nano](#using-a-nicenano))
 - Your Touch controllers
 - **Python 3** for the control panel
 
@@ -104,6 +105,29 @@ one-controller mini pad, switch-off on computer sleep, which controller's gyro D
 thumb sensors, touch threshold and lift delay. A controller whose battery dies buzzes the other one as it
 switches off.
 
+## Using a nice!nano
+QuestPad also builds for the **nice!nano v2** (and boards that share its bootloader). This build hasn't been tried on
+real hardware yet: reports welcome.
+
+**Installing.** Use **`questpad-nicenano.uf2`** instead of `questpad.bin`. The first time, put the board into its
+bootloader by shorting **RST to GND twice quickly**: the blue LED pulses and a drive called **NICENANO** appears.
+Then click **Install / update firmware…** in the control panel (or drag the file onto the drive). After that the
+panel reboots the board into its bootloader by itself. The nice!nano's own software stays in place, so you can go
+back to e.g. ZMK by installing its `.uf2` the same way.
+
+**No button.** Pair, switch modes and forget the pairing from the control panel. Or wire a push button between
+**P1.06** and **GND** and it works like the dongle's.
+
+**The light.** The nice!nano has one blue LED, so it blinks patterns instead of showing colours:
+| light | meaning |
+|---|---|
+| solid | a controller is connected |
+| slow blink | waiting for controllers |
+| fast blink | pairing |
+| double blink | not paired yet |
+| three quick flashes / one long flash | pairing worked / failed |
+| 1 / 2 / 3 blinks at power-up | generic gamepad / DS4 / XInput mode |
+
 ## Troubleshooting
 **Steam asks me to set up the controller.** That's the generic gamepad mode. Switch to DS4 mode and Steam
 recognises it as a PlayStation 4 controller with everything already mapped.
@@ -128,13 +152,15 @@ scripts from Git Bash.
 rustup target add thumbv7em-none-eabihf
 rustup component add llvm-tools
 firmware/flash.sh            # build and flash in place (add --dfu for the RESET-button bootloader)
+firmware/flash.sh --nicenano # nice!nano v2 build, installed through its UF2 bootloader
 tools/package.sh             # build the release zip into dist/
 ```
 
 | path | what |
 |---|---|
-| `firmware/` | dongle firmware (Rust, [embassy](https://embassy.dev)) |
+| `firmware/` | dongle firmware (Rust, [embassy](https://embassy.dev)); `--features nicenano` for the nice!nano |
 | `host/gui.py` | control panel (Tkinter; pySerial bundled in `host/vendor`; `--demo` shows sample data) |
+| `host/dfu.py`, `host/selfupdate.py`, `host/uf2.py` | firmware install: dongle bootloader, dongle in place, nice!nano |
 | `host/link.py` | `--watch` live inputs / IMU / battery / link stats, `--log` the controllers' own debug log |
 | `host/regs.py` | read and write controller registers |
 | `host/dm.py`, `host/sniff_adv.py` | pairing-mode tools |

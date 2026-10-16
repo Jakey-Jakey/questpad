@@ -171,7 +171,8 @@ bit; flags bit 5 means error.
 
 ## The dongle firmware
 Rust on [embassy](https://embassy.dev), for the nRF52840 Dongle (PCA10059). The application sits at `0x1000`, under
-Nordic's Open USB DFU bootloader.
+Nordic's Open USB DFU bootloader. The `nicenano` cargo feature builds for the nice!nano v2 instead (see
+[Other boards](#other-boards)).
 
 | | |
 |---|---|
@@ -180,6 +181,7 @@ Nordic's Open USB DFU bootloader.
 | `gamepad.rs` | controller data → one pad state; HID mode report; power-off gesture and idle timer |
 | `ds4.rs`, `xinput.rs` | DS4 and Xbox 360 modes (descriptor / layout from GP2040-CE) |
 | `ui.rs` | status LED, button, pairing from the dongle |
+| `board.rs` | what differs per board (pins are taken in `main.rs`, flash layouts are `memory-<board>.x`) |
 | `settings.rs`, `pairing.rs` | settings (flash `0xDE000`) and the pairing record (flash `0xDF000`) |
 | `selfupdate.rs`, `wdt.rs` | in-place firmware updates, watchdog |
 | `main.rs` | USB setup per mode, and the serial protocol the control panel uses (command list at the top) |
@@ -196,6 +198,21 @@ the firmware turns left samples into the right controller's axes before applying
 change, so `host/selfupdate.py` sets four spare bytes in the vector table (offset `0x1C`) to make the new image's
 CRC match, and the firmware writes the image from a routine running in RAM. A watchdog resets the dongle if it ever
 stops responding for 8 s.
+
+### Other boards
+The firmware uses only on-chip peripherals, so any nRF52840 board with USB can run it; what differs is the bootloader,
+the flash layout and the front panel. `cargo build --release --features nicenano` (or `firmware/flash.sh --nicenano`)
+builds for the **nice!nano v2**:
+
+- **Flash.** The app starts at `0x26000`, above the S140 SoftDevice that the Adafruit UF2 bootloader keeps
+  (`memory-nicenano.x`). The SoftDevice is never enabled; it forwards every interrupt to the app and uses no RAM above
+  `0x20000008`. Settings and the pairing record stay at `0xDE000` / `0xDF000`.
+- **Updates.** `CMD_DFU` sets GPREGRET to `0x57`, so the bootloader comes up as its `NICENANO` drive; `host/uf2.py`
+  copies `questpad-nicenano.uf2` onto it. The bootloader only rewrites the pages the image covers (pairing and
+  settings survive) and feeds the watchdog while it waits. The in-place update commands are refused.
+- **Front panel.** One blue LED on P0.15 (active high), shown as patterns instead of colours (see `ui.rs`). There is
+  no button; one wired from P1.06 to GND works like the dongle's.
+- **Version.** The ping reply ends in ` nice!nano`, which the control panel uses to pick the update path.
 
 ## Adding another controller
 1. **Advertisement.** Put the controller in pairing mode and run `host/sniff_adv.py`: note its type, ids and

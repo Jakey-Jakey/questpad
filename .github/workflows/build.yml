@@ -27,6 +27,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.zip firmware/target/questpad.bin --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip firmware/target/questpad.bin firmware/target/questpad-nicenano.uf2 --generate-notes
     permissions:
       contents: write

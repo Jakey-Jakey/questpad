@@ -25,11 +25,12 @@ except ImportError:
 from bridge import Bridge  # noqa: E402
 from mapping import LOG_ITEM_LEN, Hand  # noqa: E402
 
-FIRMWARE_CANDIDATES = [
-    os.path.join(ROOT, "questpad.bin"),
-    os.path.join(ROOT, "firmware", "questpad.bin"),
-    os.path.join(ROOT, "firmware", "target", "questpad.bin"),
-]
+FIRMWARE_DIRS = [ROOT, os.path.join(ROOT, "firmware"), os.path.join(ROOT, "firmware", "target")]
+BOOTLOADER_HELP = {
+    False: "1. Plug in the dongle.\n2. Press its small sideways RESET button (the red LED pulses).\n3. Click OK.",
+    True: "1. Plug in the nice!nano.\n2. Short its RST pin to GND twice quickly (the blue LED pulses and a "
+          "NICENANO drive appears).\n3. Click OK.",
+}
 MODE_HELP = {
     0: "HID gamepad: works everywhere; Steam asks you to set up the layout once.",
     1: "DS4 (PlayStation 4 controller): Steam, SDL games, macOS and Linux recognise it "
@@ -135,6 +136,7 @@ class App:
         self.hands = {}  # slot -> (side, Hand)
         self.settings = None
         self.connected = False
+        self.version = ""
         self._build()
         if demo:
             self._demo()
@@ -276,6 +278,7 @@ class App:
 
     def _on_connected(self, version):
         self.connected = True
+        self.version = version
         self.status_var.set(f"Connected: {version}")
         self.worker.call(lambda b: b.settings_get(), self._show_settings)
 
@@ -459,28 +462,37 @@ class App:
         self.worker.call(lambda b: b.settings_set(new), done)
 
     def _update_firmware(self):
-        initial = next((p for p in FIRMWARE_CANDIDATES if os.path.exists(p)), None)
-        path = filedialog.askopenfilename(title="Choose firmware (questpad.bin)",
+        # The dongle takes questpad.bin, the nice!nano questpad-nicenano.uf2 (through its UF2 drive).
+        nicenano = self.connected and "nice!nano" in self.version
+        name = "questpad-nicenano.uf2" if nicenano else "questpad.bin"
+        initial = next((p for p in (os.path.join(d, name) for d in FIRMWARE_DIRS) if os.path.exists(p)), None)
+        path = filedialog.askopenfilename(title=f"Choose firmware ({name})",
                                           initialdir=os.path.dirname(initial) if initial else ROOT,
                                           initialfile=os.path.basename(initial) if initial else "",
-                                          filetypes=[("Firmware", "*.bin")])
+                                          filetypes=[("Firmware", "*.bin *.uf2")])
         if not path:
             return
         fw = open(path, "rb").read()
+        is_uf2 = path.lower().endswith(".uf2")
         connected = self.connected
+        if connected and is_uf2 != nicenano:
+            messagebox.showerror("Install firmware", f"This {'nice!nano' if nicenano else 'dongle'} needs {name}.")
+            return
         if not connected and not messagebox.askokcancel(
                 "Install firmware",
-                "No dongle with this firmware is connected, so it must be flashed through its bootloader:\n\n"
-                "1. Plug in the dongle.\n2. Press its small sideways RESET button (the red LED pulses).\n"
-                "3. Click OK."):
+                "No board with this firmware is connected, so it must be flashed through its bootloader:\n\n"
+                + BOOTLOADER_HELP[is_uf2]):
             return
         progress = lambda text: self.events.put(("call", (self.fw_var.set, text)))  # noqa: E731
 
         def run():
             import dfu
             import selfupdate
+            import uf2
             try:
-                if connected:
+                if is_uf2:
+                    uf2.uf2_flash(fw, progress)
+                elif connected:
                     b = Bridge()
                     selfupdate.self_update(fw, progress, b)
                 else:

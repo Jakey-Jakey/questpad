@@ -57,7 +57,10 @@ class UpdateError(Exception):
 def self_update(fw, progress=print, bridge=None):
     """Flash `fw` (bytes) through the running dongle firmware. `progress(text)` gets status lines."""
     b = bridge or Bridge()
-    progress(f"dongle: {b.ping()[1]}")
+    version = b.ping()[1]
+    progress(f"dongle: {version}")
+    if "nice!nano" in version:
+        raise UpdateError("this is a nice!nano: install questpad-nicenano.uf2 (uf2.py) instead")
     image_size, image_crc, bank_code = (b.peek(SETTINGS + o) for o in (0x18, 0x1C, 0x20))
     if bank_code != 1 or image_size < FORGE_OFF + 4:
         raise UpdateError(f"unexpected bootloader settings (size={image_size:#x} code={bank_code}); use DFU")

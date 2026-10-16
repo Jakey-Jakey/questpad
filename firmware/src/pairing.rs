@@ -1,8 +1,9 @@
 //! Pairing record (network id + link key) kept in the last application flash page, so the
 //! dongle can host the link on its own from power-up.
 //!
-//! Self-update only erases the pages the new image occupies (from 0x1000), and memory.x stops
-//! the image below this page, so the record survives reflashing (a bootloader DFU may wipe it).
+//! Self-update and the nice!nano's UF2 bootloader only erase the pages the new image occupies,
+//! and memory-*.x stops the image below this page, so the record survives reflashing (the
+//! dongle's bootloader DFU may wipe it).
 
 use core::ptr::{read_volatile, write_volatile};
 
