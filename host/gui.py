@@ -1,4 +1,4 @@
-"""QuestPad control panel: pairing, mode, settings, controller status, firmware.
+"""QuestPad control panel: pairing, mode, settings, controller status, motion for emulators, firmware.
 
 Run it with any Python 3 that has Tkinter (python.org installers do):
     python3 host/gui.py          (or double-click "QuestPad.pyw" / "QuestPad.command")
@@ -22,21 +22,29 @@ try:
 except ImportError:
     sys.path.insert(0, os.path.join(HERE, "vendor"))
 
+import dsu  # noqa: E402
 from bridge import Bridge  # noqa: E402
 from mapping import LOG_ITEM_LEN, Hand  # noqa: E402
 
+# Panel preferences (not dongle settings): %APPDATA%\QuestPad on Windows, ~/.config/questpad elsewhere.
+PREFS = os.path.join(os.environ["APPDATA"], "QuestPad", "panel.json") if os.environ.get("APPDATA") else \
+    os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "questpad", "panel.json")
 FIRMWARE_CANDIDATES = [
     os.path.join(ROOT, "questpad.bin"),
     os.path.join(ROOT, "firmware", "questpad.bin"),
     os.path.join(ROOT, "firmware", "target", "questpad.bin"),
 ]
 MODE_HELP = {
-    0: "HID gamepad: works everywhere; Steam asks you to set up the layout once.",
+    0: "HID gamepad: works everywhere; Steam asks you to set up the layout once. Emulators can get gyro from "
+       "Motion for emulators below.",
     1: "DS4 (PlayStation 4 controller): Steam, SDL games, macOS and Linux recognise it "
-       "instantly, with gyro, rumble and battery. Best choice for Steam.",
-    2: "XInput (Xbox 360 controller): native in Windows games, also Linux and macOS. No gyro. "
-       "This app can't reach the dongle in this mode: hold the dongle's button 3 s to leave it.",
+       "instantly, with gyro, rumble and battery. Best choice for Steam. Emulators can also use "
+       "Motion for emulators below.",
+    2: "XInput (Xbox 360 controller): native in Windows games, also Linux and macOS. No gyro, and no motion for "
+       "emulators. This app can't reach the dongle in this mode: hold the dongle's button 3 s to leave it.",
 }
+MOTION_OFF = ("Off. Emulators that take a DSU (Cemuhook) controller, like Cemu, Dolphin and Ryujinx, can use "
+              "each controller's gyro. Setup: docs/motion.md.")
 PAIR_TEXT = {
     "idle": "",
     "waiting": "Waiting: hold Oculus + Y (left) or Oculus + B (right) until the controller's LED blinks.",
@@ -57,14 +65,21 @@ class Worker(threading.Thread):
         self.cmds = queue.Queue()
         self.bridge = None
         self.paused = False
+        self.tap = None  # sees every frame from the dongle, on this thread (the motion server's feed)
 
     def call(self, fn, done=None, fail=None):
         """Run fn(bridge) on the worker; done(result) / fail(error) run on the GUI thread."""
         self.cmds.put((fn, done, fail))
 
+    def set_tap(self, fn):
+        self.tap = fn
+        if self.bridge:
+            self.bridge.tap = fn
+
     def _connect(self):
         try:
             self.bridge = Bridge()
+            self.bridge.tap = self.tap
             self.events.put(("connected", self.bridge.ping()[1]))
         except (SystemExit, Exception):
             self.bridge = None
@@ -135,11 +150,16 @@ class App:
         self.hands = {}  # slot -> (side, Hand)
         self.settings = None
         self.connected = False
+        self.motion = None  # dsu.Server while motion for emulators is on
         self._build()
         if demo:
             self._demo()
             return
+        root.protocol("WM_DELETE_WINDOW", self._quit)
         self.worker.start()
+        if self._prefs().get("motion"):
+            self.motion_var.set(1)
+            self._toggle_motion(remember=False)
         root.after(50, self._poll)
 
     def _demo(self):
@@ -153,6 +173,8 @@ class App:
                              controllers=[(1, "left", 100), (2, "right", 80)]))
         self.ctl_rows["left"][2].set(".Y.. stick  +12, +71  trig   0  grip  86")
         self.ctl_rows["right"][2].set("A... stick   +0,  +0  trig  64  grip   0")
+        self.motion_var.set(1)
+        self.motion_status.set(f"On at {dsu.HOST}:{dsu.PORT} - 1 emulator connected - slot 1: right, slot 2: left")
 
     # ---- layout ----
 
@@ -235,7 +257,7 @@ class App:
         check(4, 0, "connect_buzz", "Buzz when a controller connects")
         check(4, 2, "single_mode", "One controller = whole mini gamepad")
         check(5, 0, "off_on_suspend", "Turn controllers off when the computer sleeps")
-        check(5, 2, "gyro_left", "Gyro from the LEFT controller (DS4)")
+        check(5, 2, "gyro_left", "Gyro from the LEFT controller (DS4, DSU slot 1)")
 
         # DS4 touchpad: which touch sensors put each thumb on its half of the pad (bits 0 X/A, 1 Y/B, 2 stick,
         # 3 trigger).
@@ -254,6 +276,15 @@ class App:
         spin(9, 0, "touch_pct", "Touch threshold % (lower = more sensitive)", 25, 200, step=5)
         ttk.Button(st, text="Save settings", command=self._save_settings).grid(row=10, column=0, sticky="w",
                                                                                 pady=(6, 0))
+
+        # Motion for emulators: the DSU server (dsu.py), fed with the dongle's frames by the worker
+        mo = ttk.LabelFrame(main, text="Motion for emulators (DSU / Cemuhook)", padding=6)
+        mo.pack(fill="x", **pad)
+        self.motion_var = tk.IntVar(value=0)
+        ttk.Checkbutton(mo, text="Send motion to emulators (Cemu, Dolphin, Ryujinx...)", variable=self.motion_var,
+                        command=self._toggle_motion).grid(row=0, column=0, sticky="w")
+        self.motion_status = tk.StringVar(value=MOTION_OFF)
+        ttk.Label(mo, textvariable=self.motion_status, wraplength=520).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
         # Firmware
         fw = ttk.LabelFrame(main, text="Firmware", padding=6)
@@ -288,6 +319,9 @@ class App:
             state.set("-")
             batt["value"] = 0
             inputs.set("")
+        if self.motion:
+            self.motion.clear()
+        self._show_motion()
 
     def _on_error(self, text):
         messagebox.showerror("QuestPad", text)
@@ -327,6 +361,7 @@ class App:
             self.pair_btn.config(text="Cancel pairing")
         else:
             self.pair_btn.config(text="Pair a controller")
+        self._show_motion()
 
     def _on_frame(self, f):
         if f[0] == 0xA7:  # pairing progress
@@ -428,8 +463,60 @@ class App:
         self.worker.call(lambda b: b.settings_set(new))
         self.status_var.set("Switching mode; the dongle is restarting...")
 
+    # ---- motion for emulators ----
+
+    def _prefs(self):
+        try:
+            return json.load(open(PREFS))
+        except (OSError, ValueError):
+            return {}
+
+    def _save_prefs(self, **changes):
+        try:
+            os.makedirs(os.path.dirname(PREFS), exist_ok=True)
+            with open(PREFS, "w") as fh:
+                json.dump(dict(self._prefs(), **changes), fh, indent=2)
+        except OSError:
+            pass  # not remembered next time, nothing worse
+
+    def _toggle_motion(self, remember=True):
+        if self.motion_var.get() and not self.motion:
+            try:
+                self.motion = dsu.Server()
+            except OSError:
+                self.motion_var.set(0)
+                self.motion_status.set(f"Couldn't start: port {dsu.PORT} is in use. Is DS4Windows, BetterJoy or "
+                                       "another QuestPad window running? Close it and switch this on again.")
+                return
+            if self.settings:
+                self.motion.settings = self.settings
+            self.worker.set_tap(self.motion.feed)
+        elif not self.motion_var.get() and self.motion:
+            self.worker.set_tap(None)
+            self.motion.close()
+            self.motion = None
+        if remember:
+            self._save_prefs(motion=bool(self.motion))
+        self._show_motion()
+
+    def _show_motion(self):
+        if not self.motion:
+            if not self.motion_status.get().startswith("Couldn't"):
+                self.motion_status.set(MOTION_OFF)
+            return
+        where = f"On at {self.motion.host}:{self.motion.port} - "
+        self.motion_status.set(where + (self.motion.describe() if self.connected else
+                                        "waiting for the dongle (HID or DS4 mode)"))
+
+    def _quit(self):
+        if self.motion:
+            self.motion.close()  # emulators see the controllers leave, and ask again next time
+        self.root.destroy()
+
     def _show_settings(self, s):
         self.settings = s
+        if self.motion:
+            self.motion.settings = s
         for k, v in self.vars.items():
             v.set(s.get(k, 0))
         self.vars["touch_hold_ms"].set(s.get("touch_hold_10ms", 15) * 10)
@@ -453,6 +540,8 @@ class App:
         def done(ok):
             if ok:
                 self.settings = new
+                if self.motion:
+                    self.motion.settings = new
                 self.status_var.set("Settings saved.")
             else:
                 messagebox.showerror("QuestPad", "The dongle didn't accept the settings.")
