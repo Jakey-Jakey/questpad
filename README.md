@@ -29,7 +29,7 @@ Quest controllers work with headsets over a private 2.4 GHz radio link. QuestPad
 | controller | status | notes |
 |---|---|---|
 | **Quest 1** Touch | ✅ working | Tested with controller firmware 1.17.2 (bootloader 1.13.0). |
-| **Quest 2** Touch | ❔ untested | Probably a close relative of the same protocol, but newer controllers appear to use a key-exchange based pairing that Quest 1 controllers don't, so pairing would need that added. |
+| **Quest 2** Touch | ✅ working | Pairs and works the same way as Quest 1. |
 | **Quest 3 / 3S** Touch Plus | ❔ untested | Nothing known yet. |
 
 Contributions that make QuestPad work with more controllers are very welcome. See
@@ -179,7 +179,7 @@ tools/package.sh             # build the release zip into dist/
 in **[PROTOCOL.md](PROTOCOL.md)**. Ideas for the future are in [IDEAS.md](IDEAS.md). No idea if I'll get to 'em.
 
 ## Supporting a new controller
-If you have Quest 2 or Quest 3 controllers, you can help: the steps for capturing what a controller sends, and what
+If you have Quest 3 controllers, you can help: the steps for capturing what a controller sends, and what
 to look for, are in [PROTOCOL.md → Adding another controller](PROTOCOL.md#adding-another-controller). A pull request
 with partial findings is useful too.
 
