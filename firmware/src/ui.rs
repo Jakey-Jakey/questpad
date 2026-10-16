@@ -6,7 +6,8 @@
 //! One-colour LED (nice!nano): the same patterns, except not paired = double blink, pairing failed
 //! = one long flash, and the mode shows as 1 / 2 / 3 blinks (HID / DS4 / XInput) at power-up.
 //! Button (SW1): press = pair a controller (press again to cancel); hold 3 s = next USB mode
-//! (reboots); hold 10 s = forget the pairing.
+//! (reboots); hold 10 s = forget the pairing. The controllers' mode gesture (gamepad.rs) also
+//! steps to the next mode.
 
 use core::sync::atomic::{AtomicU8, Ordering};
 
@@ -37,6 +38,8 @@ pub enum PairState {
 static PAIR_STATE: AtomicU8 = AtomicU8::new(PairState::Idle as u8);
 /// Start (or, while pairing, cancel) pairing: from the button or the GUI.
 pub static PAIR_REQUEST: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+/// Step to the next USB mode: the controllers' mode gesture.
+pub static MODE_REQUEST: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 /// One-shot LED feedback.
 static FLASH: Signal<CriticalSectionRawMutex, Flash> = Signal::new();
 
@@ -161,13 +164,25 @@ pub async fn button_task(mut button: Input<'static>) -> ! {
             Timer::after(Duration::from_millis(800)).await;
             cortex_m::peripheral::SCB::sys_reset();
         } else if held >= Duration::from_secs(3) {
-            let mut s = settings::get();
-            s.mode = s.mode.next();
-            set_mode_and_reboot(s).await;
+            next_mode().await;
         } else if held >= Duration::from_millis(30) {
             PAIR_REQUEST.signal(());
         }
     }
+}
+
+#[embassy_executor::task]
+pub async fn mode_task() -> ! {
+    MODE_REQUEST.wait().await;
+    // Let the controller's confirmation buzz (and the motor-off after it) go out before the link stops.
+    Timer::after(Duration::from_millis(500)).await;
+    next_mode().await
+}
+
+async fn next_mode() -> ! {
+    let mut s = settings::get();
+    s.mode = s.mode.next();
+    set_mode_and_reboot(s).await
 }
 
 /// Persist a new USB mode and reboot into it.

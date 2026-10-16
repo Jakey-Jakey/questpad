@@ -36,7 +36,8 @@ MODE_HELP = {
     1: "DS4 (PlayStation 4 controller): Steam, SDL games, macOS and Linux recognise it "
        "instantly, with gyro, rumble and battery. Best choice for Steam.",
     2: "XInput (Xbox 360 controller): native in Windows games, also Linux and macOS. No gyro. "
-       "This app can't reach the dongle in this mode: hold the dongle's button 3 s to leave it.",
+       "This app can't reach the dongle in this mode: to leave it, hold Oculus / Menu with the trigger pulled for "
+       "5 s, or the dongle's button for 3 s.",
 }
 PAIR_TEXT = {
     "idle": "",
@@ -284,8 +285,8 @@ class App:
 
     def _on_disconnected(self, _):
         if self.connected or not self.status_var.get().startswith("Dongle not found"):
-            self.status_var.set("Dongle not found. Plug it in (in XInput mode, hold its button 3 s to switch "
-                                "back first).")
+            self.status_var.set("Dongle not found. Plug it in (to leave XInput mode, hold Oculus / Menu with the "
+                                "trigger pulled for 5 s, or the dongle's button for 3 s).")
         self.connected = False
         for state, batt, inputs in self.ctl_rows.values():
             state.set("-")
@@ -424,8 +425,9 @@ class App:
         if mode == self.settings["mode"]:
             return
         if mode == 2 and not messagebox.askyesno(
-                "XInput mode", "In XInput mode this app can't talk to the dongle. To come back, hold the "
-                               "dongle's button for 3 seconds (it cycles HID -> DS4 -> XInput). Switch now?"):
+                "XInput mode", "In XInput mode this app can't talk to the dongle. To come back, hold Oculus or "
+                               "Menu with the trigger pulled all the way for 5 seconds, or the dongle's button for "
+                               "3 seconds (both cycle HID -> DS4 -> XInput). Switch now?"):
             return
         new = dict(self.settings, mode=mode)
         self.worker.call(lambda b: b.settings_set(new))

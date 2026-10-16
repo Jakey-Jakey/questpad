@@ -81,7 +81,9 @@ By default only the gyro controller's thumb counts, so the other thumb never int
 | DS4 (PlayStation 4) | blue | **Steam**, SDL games, emulators, macOS, Linux: no setup, gyro, rumble, battery |
 | XInput (Xbox 360) | purple | If you don't need gyro this is recommended |
 
-Switch in the panel or by holding the dongle's button for 3 s (it steps through the modes in the above order).
+Switch in the panel, by holding the dongle's button for 3 s, or from a controller: hold **Oculus** or **Menu** with
+the **trigger pulled all the way** for 5 s, until it buzzes. Both step through the modes in the above order, so from
+XInput the next one is generic gamepad, where the panel can reach the dongle again.
 
 **The dongle's light.**
 | light | meaning |
@@ -95,8 +97,9 @@ Switch in the panel or by holding the dongle's button for 3 s (it steps through 
 **The dongle's big button.** Tap = pair a controller (tap again to cancel) · hold 3 s = next mode · hold 10 s = forget the
 pairing.
 
-**Turning controllers off.** Hold **Oculus** or **Menu** for 3 s until they buzz, then put them down; each switches
-off once it's still. They also switch off after 10 minutes untouched and when the computer goes to sleep.
+**Turning controllers off.** Hold **Oculus** or **Menu** for 3 s (trigger released) until they buzz, then put them
+down; each switches off once it's still. They also switch off after 10 minutes untouched and when the computer goes
+to sleep.
 Pick one up (or press a button) to wake it.
 
 **Settings** (control panel): stick deadzone, grip strength that counts as LB / RB, idle time before switching off,
@@ -115,8 +118,9 @@ Then click **Install / update firmware…** in the control panel (or drag the fi
 panel reboots the board into its bootloader by itself. The nice!nano's own software stays in place, so you can go
 back to e.g. ZMK by installing its `.uf2` the same way.
 
-**No button.** Pair, switch modes and forget the pairing from the control panel. Or wire a push button between
-**P1.06** and **GND** and it works like the dongle's.
+**No button.** Pair and forget the pairing from the control panel. Switch modes there or with the controller
+gesture (Oculus / Menu with the trigger pulled, 5 s), which also gets you out of XInput mode. Or wire a push button
+between **P1.06** and **GND** and it works like the dongle's.
 
 **The light.** The nice!nano has one blue LED, so it blinks patterns instead of showing colours:
 | light | meaning |
@@ -133,7 +137,8 @@ back to e.g. ZMK by installing its `.uf2` the same way.
 recognises it as a PlayStation 4 controller with everything already mapped.
 
 **The control panel says "Dongle not found".** Check it's plugged in. In **XInput** mode the panel can't reach the
-dongle (Windows' Xbox driver owns it): hold the dongle's button 3 s to switch to the generic mode first. On Linux,
+dongle (Windows' Xbox driver owns it): hold Oculus or Menu with the trigger pulled for 5 s (or the dongle's button
+for 3 s) to switch to the generic mode first. On Linux,
 add yourself to the `dialout` group (or equivalent) so the panel can open the dongle's serial port.
 
 **A controller won't connect.** Press a button to wake it. If it still doesn't appear (dongle light blinking),

@@ -520,6 +520,7 @@ async fn main(spawner: Spawner) {
     // Dongle SW1; on the nice!nano a header pin, for an optional button to GND.
     spawner.spawn(ui::button_task(Input::new(p.P1_06, Pull::Up)).unwrap());
     spawner.spawn(ui::pair_task().unwrap());
+    spawner.spawn(ui::mode_task().unwrap());
     spawner.spawn(wdt::task().unwrap());
 
     let driver = Driver::new(p.USBD, Irqs, HardwareVbusDetect::new(Irqs));

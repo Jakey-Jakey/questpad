@@ -1,5 +1,6 @@
 //! Touch controllers -> one combined pad state, encoded per USB mode (HID here, DS4 in `ds4.rs`,
-//! XInput in `xinput.rs`), plus the power policy (the controllers have no off switch).
+//! XInput in `xinput.rs`), plus the power policy (the controllers have no off switch) and the
+//! mode gesture.
 //!
 //! Notification ids (verified on air, see PROTOCOL.md): 0 battery %; 1 IMU [ts u48][accel xyz i16
 //! ~1024/g][gyro xyz i16 ~8.2/dps]; 2 stick x,y i16 (+y up, 0,0 at rest: the controllers apply
@@ -455,11 +456,16 @@ const STILL_FRAMES: u32 = 500;
 /// An armed power-off fires anyway after this long (30 s).
 const ARMED_MAX_FRAMES: u32 = 30 * 500;
 const FRAMES_PER_S: u32 = 500;
+/// Mode gesture: Oculus / Menu held with the trigger pulled all the way, for this long. It works in
+/// every mode, so XInput mode (no serial port for the control panel) can be left without a button.
+const MODE_HOLD_S: u32 = 5;
+const MODE_TRIGGER: u16 = ANALOG_MAX * 9 / 10;
 
 #[derive(Clone, Copy)]
 struct Activity {
     last_buttons: u8,
     hold_since: Option<u32>,
+    mode_hold_since: Option<u32>,
     last_active: u32,
     /// Set by any IMU sample above STILL_GYRO since the last policy check.
     moving: bool,
@@ -472,6 +478,7 @@ struct Activity {
 const NO_ACTIVITY: Activity = Activity {
     last_buttons: 0,
     hold_since: None,
+    mode_hold_since: None,
     last_active: 0,
     moving: false,
     still_since: 0,
@@ -496,6 +503,8 @@ pub enum PowerAction {
     LowBattery,
     /// This controller reports a dead battery and is shutting down: buzz the others.
     DeadBattery,
+    /// Mode gesture held: switch to the next USB mode (and buzz this controller to confirm).
+    NextMode,
 }
 
 /// Arm a power-off for `slot`: it fires once the controller is put down and still.
@@ -526,6 +535,17 @@ pub fn power_policy(slot: u8, frame: u32) -> PowerAction {
         a.still_since = frame;
     }
     a.moving = false;
+    let menu = h.buttons & 0x08 != 0;
+    let mode_gesture = menu && h.trigger >= MODE_TRIGGER;
+    if mode_gesture {
+        let since = *a.mode_hold_since.get_or_insert(frame);
+        if frame.wrapping_sub(since) >= MODE_HOLD_S * FRAMES_PER_S {
+            a.mode_hold_since = None;
+            return PowerAction::NextMode;
+        }
+    } else {
+        a.mode_hold_since = None;
+    }
     if let Some(armed) = a.armed_at {
         let still = frame.wrapping_sub(a.still_since) >= STILL_FRAMES;
         if still || frame.wrapping_sub(armed) >= ARMED_MAX_FRAMES {
@@ -534,7 +554,7 @@ pub fn power_policy(slot: u8, frame: u32) -> PowerAction {
         }
         return PowerAction::None;
     }
-    if h.buttons & 0x08 != 0 && s.off_hold_s > 0 {
+    if menu && !mode_gesture && s.off_hold_s > 0 {
         let since = *a.hold_since.get_or_insert(frame);
         if frame.wrapping_sub(since) >= s.off_hold_s as u32 * FRAMES_PER_S {
             a.hold_since = None;

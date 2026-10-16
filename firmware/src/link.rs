@@ -60,7 +60,7 @@ const REG_HAPTIC: u8 = 0x97;
 pub const DL_MAX: usize = 32;
 /// Controller register: power off (system off; wakes on motion / button), any data.
 const REG_POWER_OFF: u8 = 0x05;
-/// Feedback buzz lengths (frames of 2 ms): power-off gesture, connect, low battery.
+/// Feedback buzz lengths (frames of 2 ms): power-off and mode gestures, connect, low battery.
 const BUZZ_FRAMES: u32 = 100;
 const CONNECT_BUZZ_FRAMES: u32 = 60;
 const LOW_BATT_BUZZ_FRAMES: u32 = 400;
@@ -668,6 +668,10 @@ fn uplink(l: &mut Link, job: Job, mic_ok: bool) {
                         l.slots[s].buzz_until = l.frame.wrapping_add(LOW_BATT_BUZZ_FRAMES);
                     }
                 }
+            }
+            crate::gamepad::PowerAction::NextMode => {
+                l.slots[slot as usize].buzz_until = l.frame.wrapping_add(BUZZ_FRAMES);
+                crate::ui::MODE_REQUEST.signal(());
             }
             crate::gamepad::PowerAction::None => {}
         }

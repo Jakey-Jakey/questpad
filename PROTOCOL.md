@@ -178,7 +178,7 @@ Nordic's Open USB DFU bootloader. The `nicenano` cargo feature builds for the ni
 |---|---|
 | `link.rs` | the main-link host: frame timing, hopping, joins, decryption queue, requests |
 | `radio.rs` | radio driver and the pairing-mode (DM) engine |
-| `gamepad.rs` | controller data → one pad state; HID mode report; power-off gesture and idle timer |
+| `gamepad.rs` | controller data → one pad state; HID mode report; power-off and mode gestures, idle timer |
 | `ds4.rs`, `xinput.rs` | DS4 and Xbox 360 modes (descriptor / layout from GP2040-CE) |
 | `ui.rs` | status LED, button, pairing from the dongle |
 | `board.rs` | what differs per board (pins are taken in `main.rs`, flash layouts are `memory-<board>.x`) |
