@@ -126,7 +126,7 @@ Each **entry** is `[id:5 | len_lo:3 << 5] [len_hi:4 | seq:3 << 4 | last << 7] [d
 | id | content |
 |---|---|
 | 0 | battery % |
-| 1 | IMU, 18 B: timestamp (48-bit µs), accel x y z (i16, ~1024 per g), gyro x y z (i16, ~8.2 per °/s); every 2 ms |
+| 1 | IMU, 18 B: timestamp (48-bit µs), accel x y z (i16, 1024 per g), gyro x y z (i16, 8.192 per °/s); every 2 ms |
 | 2 | thumbstick x, y (i16; +x right, +y up; exactly 0, 0 at rest, already calibrated) |
 | 3 | trigger, grip: two 12-bit values packed in 3 bytes, inverted (4095 = released, 0 = fully squeezed) |
 | 4 | buttons: bit 0 X / A, bit 1 Y / B, bit 2 stick click, bit 3 Menu / Oculus (bit 4 is always set) |
@@ -136,7 +136,12 @@ Each **entry** is `[id:5 | len_lo:3 << 5] [len_hi:4 | seq:3 << 4 | last << 7] [d
 | 7 | raw touch levels, 4 × u8 (X / A, Y / B, stick, trigger), clamped to 0..255; ~0 untouched, ~200 for a finger on the trigger, 30..60 hovering |
 
 **IMU orientation** (right controller, held naturally): −Z points up and −Y points forward, so for a DS4-style frame
-(x right, y up, z toward you) DS4 x = +X, y = −Z, z = +Y.
+(x right, y up, z toward you) DS4 x = +X, y = −Z, z = +Y. The IMU is a TDK ICM-20601 (register `0x31`); its gyro uses
+the same axes as its accelerometer, right-handed. Checked on both hands by holding still poses (playing, pointing at
+the floor, right side down) and integrating the gyro over each move between them: the gyro turns gravity the way the
+accelerometer sees it to within a few degrees, and tipping the front up, turning right and twisting clockwise give
+positive pitch, yaw and roll. The controller doesn't remove the gyro's resting offset: about 0.3–1.7 °/s per axis,
+different per controller (noise at rest ~0.1 °/s).
 
 ## Commands to a controller
 A beacon can carry one request, addressed by its downlink mask:
@@ -153,6 +158,9 @@ bit; flags bit 5 means error.
 
 ## Controller registers
 `host/regs.py` reads and writes these. Many other register numbers exist but do nothing on this firmware.
+These are Rift S-generation Touch controllers: `0x32` answers byte for byte as in
+[OpenHMD's Rift S driver](https://github.com/OpenHMD/OpenHMD/tree/master/src/drv_oculus_rift_s), though its
+calibration-file read (`0x2b`) returns an error here.
 
 | register | | what |
 |---|---|---|
@@ -160,7 +168,8 @@ bit; flags bit 5 means error.
 | `0x02`, `0x03` | read | board serial, device serial |
 | `0x24`, `0x25` | read | app / bootloader version |
 | `0x2F` | read | battery: f32 %, then the cell voltage (u16, mV) |
-| `0x31`, `0x32` | read | IMU part number and configuration |
+| `0x31` | read | IMU part number (`ICM20601`), then f32 accel and gyro scale |
+| `0x32` | read | IMU configuration: u16 accel range (32000 mg), gyro range (4000 °/s), accel and gyro rate (500 Hz), f32 g per count (1/1024), f32 °/s per count (1/8.192) |
 | `0x05` | write | **power off** (wakes on motion or a button) |
 | `0x06` | write | `1` standby (packets almost stop), `0` active |
 | `0x97` | write | **vibration strength**, 1 byte; stays on until set back to 0 |
