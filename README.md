@@ -109,8 +109,8 @@ Pick one up (or press a button) to wake it.
 **Settings** (control panel): stick deadzone, grip strength that counts as LB / RB, idle time before switching off,
 the hold time for the off gesture, low-battery warning level, buzz strength, dongle LED brightness, connect buzz,
 one-controller mini pad, switch-off on computer sleep, which controller's gyro DS4 mode uses (also DSU controller 1
-for emulators), and the DS4 touchpad thumb sensors, touch threshold and lift delay. A controller whose battery dies buzzes the other one as it
-switches off.
+for emulators), and the DS4 touchpad thumb sensors, touch threshold and lift delay. A controller whose battery dies
+buzzes the other one as it switches off.
 
 ## Using a nice!nano
 QuestPad also builds for the **nice!nano v2** (and boards that share its bootloader). This build hasn't been tried on
