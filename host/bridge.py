@@ -76,6 +76,7 @@ class Bridge:
             raise SystemExit("dongle bridge firmware not found (flash it with firmware/flash.sh)")
         self.s = serial.Serial(port, 115200, timeout=0.05)
         self.acc = bytearray()
+        self.tap = None  # called with every frame received, including those a command's reply wait skips
 
     def send(self, payload):
         self.s.write(cobs_encode(payload))
@@ -84,15 +85,16 @@ class Bridge:
         """Yield decoded frames until `timeout` seconds pass (forever if None)."""
         end = None if timeout is None else time.time() + timeout
         while end is None or time.time() < end:
-            chunk = self.s.read(4096)
-            for b in chunk:
-                if b == 0:
-                    f = cobs_decode(bytes(self.acc))
-                    self.acc.clear()
-                    if f:
-                        yield f
-                else:
-                    self.acc.append(b)
+            # Whatever has arrived, else wait for the first byte: frames come out as soon as they land.
+            self.acc += self.s.read(max(1, self.s.in_waiting))
+            *done, rest = self.acc.split(b"\x00")
+            self.acc = bytearray(rest)
+            for raw in done:
+                f = cobs_decode(bytes(raw))
+                if f:
+                    if self.tap:
+                        self.tap(f)
+                    yield f
 
     def events(self, timeout=None):
         for f in self.frames(timeout):
@@ -266,13 +268,16 @@ class Bridge:
         """-> dict(mode, paired, pair_state, controllers=[(slot, 'left'/'right', battery or None)],
         flags={slot: controller status flags (STATUS_*)}; flags is empty before firmware 1.2.0)."""
         self.send(b"\x2e")
-        f = self._wait(0xA9)
+        return self.parse_status(self._wait(0xA9))
+
+    @classmethod
+    def parse_status(cls, f):
         n = f[4]
         ctl = [(f[i], "right" if f[i + 1] else "left", None if f[i + 2] == 255 else f[i + 2])
                for i in range(5, 5 + 3 * n, 3)]
         flags = dict(zip((c[0] for c in ctl), f[5 + 3 * n : 5 + 4 * n])) if len(f) >= 5 + 4 * n else {}
-        return dict(mode=self.MODES[f[1]] if f[1] < 3 else f[1], paired=bool(f[2]),
-                    pair_state=self.PAIR_STATES[f[3]] if f[3] < 7 else f[3], controllers=ctl, flags=flags)
+        return dict(mode=cls.MODES[f[1]] if f[1] < 3 else f[1], paired=bool(f[2]),
+                    pair_state=cls.PAIR_STATES[f[3]] if f[3] < 7 else f[3], controllers=ctl, flags=flags)
 
     def pair_start(self):
         """Pair a controller from the dongle (or cancel pairing). Progress arrives as 0xA7 frames."""

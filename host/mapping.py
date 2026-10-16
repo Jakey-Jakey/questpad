@@ -63,6 +63,7 @@ class Hand:
     battery: int = 0
     accel: tuple = (0, 0, 0)
     gyro: tuple = (0, 0, 0)
+    imu_ts: int = 0  # controller clock of the latest IMU sample, us
     seen: set = field(default_factory=set)
     raw: dict = field(default_factory=dict)  # latest data per notification id
 
@@ -84,6 +85,7 @@ class Hand:
             elif nid == NTF_IMU and len(d) >= 18:
                 ax, ay, az, gx, gy, gz = struct.unpack_from("<6h", d, 6)
                 self.accel, self.gyro = (ax, ay, az), (gx, gy, gz)
+                self.imu_ts = int.from_bytes(d[:6], "little")
 
 
 @dataclass
