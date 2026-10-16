@@ -188,7 +188,9 @@ Nordic's Open USB DFU bootloader.
 (`045E:028E`, Xbox 360 interfaces only, so no serial port). DS4 mode reports gyro at 16 per °/s and accel at 8192 per g
 and says so in its calibration report, so hosts scale it correctly. The left controller's IMU is mounted rotated 90°
 about Z from the right's (left X = right Y, left Y = −right X, Z the same; measured with both at rest in two poses), so
-the firmware turns left samples into the right controller's axes before applying the `imu_map` setting.
+the firmware turns left samples into the right controller's axes before applying the `imu_map` setting. It also removes
+each gyro's resting offset (0.3–1.7 °/s per axis; the controllers don't), re-measured whenever a controller lies still
+for about a second (`gamepad.rs`, from 1.3.0).
 
 **Front panel.** RGB LED: red P0.08, green P0.12, blue P1.09 (active low). Button: P1.06.
 

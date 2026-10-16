@@ -2,7 +2,7 @@
 //! XInput in `xinput.rs`), plus the power policy (the controllers have no off switch).
 //!
 //! Notification ids (verified on air, see PROTOCOL.md): 0 battery %; 1 IMU [ts u48][accel xyz i16
-//! ~1024/g][gyro xyz i16 ~8.2/dps]; 2 stick x,y i16 (+y up, 0,0 at rest: the controllers apply
+//! 1024/g][gyro xyz i16 8.192/dps]; 2 stick x,y i16 (+y up, 0,0 at rest: the controllers apply
 //! their own calibration); 3 trigger, grip 12-bit packed, inverted (4095 released); 4 buttons
 //! (bit0 A/X, bit1 B/Y, bit2 stick click, bit3 Oculus/menu); 5 capacitive touch (bits 0..3 on A/X,
 //! B/Y, stick, trigger; bits 4..7 near the same; the thumb rest has no sensor of its own); 6 status
@@ -32,7 +32,7 @@ pub const BTN_GUIDE: u16 = 1 << 10;
 
 #[derive(Clone, Copy, Default)]
 pub struct Imu {
-    /// Controller IMU units: accel ~1024 LSB/g, gyro ~8.2 LSB/(deg/s).
+    /// Controller IMU units: accel 1024 LSB/g, gyro 8.192 LSB/(deg/s), its resting offset removed (`Rest`).
     pub accel: [i16; 3],
     pub gyro: [i16; 3],
     /// Controller timestamp, µs (low 32 bits).
@@ -310,6 +310,11 @@ pub fn link_notifications(slot: u8, mut buf: &[u8]) {
                     accel = left_to_right_frame(accel);
                     gyro = left_to_right_frame(gyro);
                 }
+                if let Some(side) = h.side {
+                    let r = rest(side);
+                    r.add(accel, gyro);
+                    gyro = [0, 1, 2].map(|i| gyro[i].saturating_sub(r.offset[i]));
+                }
                 h.imu = Imu { ts: u32::from_le_bytes([d[0], d[1], d[2], d[3]]), accel, gyro };
                 if h.imu.gyro.iter().any(|g| (*g as i32).abs() > STILL_GYRO) {
                     activity()[slot].moving = true;
@@ -352,6 +357,69 @@ pub fn link_notifications(slot: u8, mut buf: &[u8]) {
     }
     if changed {
         publish();
+    }
+}
+
+// ---- gyro drift ----
+//
+// The controllers don't remove their gyro's resting offset (0.3–1.7 °/s per axis, different per controller).
+// It is measured whenever a controller lies still: two 0.5 s blocks in a row in which no gyro axis spreads more
+// than ~2 °/s (a held controller wobbles 1–3 °/s, so holding it never counts), the accelerometer only by its
+// noise, and gravity's average doesn't shift between the blocks. Kept per hand in RAM, across rejoins; relearnt
+// after power-up (it shifts with temperature anyway). host/dsu.py does the same on the raw serial stream.
+
+const REST_SAMPLES: i32 = 250; // 0.5 s at 500 Hz
+const REST_GYRO: i32 = 16; // spread, counts (~2 °/s)
+const REST_ACCEL: i32 = 48; // spread, counts (~0.05 g)
+const REST_SHIFT: i32 = 10 * REST_SAMPLES; // block sums: gravity moved ~0.01 g
+const MAX_OFFSET: i32 = 41 * REST_SAMPLES; // block sums: 5 °/s, anything steadier and larger is a slow turn
+
+#[derive(Clone, Copy)]
+struct Rest {
+    /// Gyro offset, counts, in the right controller's axes (after `left_to_right_frame`).
+    offset: [i16; 3],
+    n: i32,
+    lo: [i16; 6],
+    hi: [i16; 6],
+    sum: [i32; 6],
+    /// Sums of the last block, if it was still.
+    prev: Option<[i32; 6]>,
+}
+
+const REST: Rest = Rest { offset: [0; 3], n: 0, lo: [i16::MAX; 6], hi: [i16::MIN; 6], sum: [0; 6], prev: None };
+
+/// Per hand (only touched from the radio-side interrupts, like `HANDS`).
+static mut RESTS: [Rest; 2] = [REST; 2];
+
+fn rest(side: Side) -> &'static mut Rest {
+    unsafe { &mut (*core::ptr::addr_of_mut!(RESTS))[side as usize] }
+}
+
+impl Rest {
+    /// One IMU sample; re-measures `offset` when this block and the last were both still.
+    fn add(&mut self, accel: [i16; 3], gyro: [i16; 3]) {
+        for (i, &v) in accel.iter().chain(gyro.iter()).enumerate() {
+            self.lo[i] = self.lo[i].min(v);
+            self.hi[i] = self.hi[i].max(v);
+            self.sum[i] += v as i32;
+        }
+        self.n += 1;
+        if self.n < REST_SAMPLES {
+            return;
+        }
+        let spread = |i: usize| self.hi[i] as i32 - self.lo[i] as i32;
+        let still = (0..3).all(|i| spread(i) < REST_ACCEL)
+            && (3..6).all(|i| spread(i) < REST_GYRO && self.sum[i].abs() < MAX_OFFSET);
+        if let (true, Some(prev)) = (still, self.prev) {
+            if (0..3).all(|i| (self.sum[i] - prev[i]).abs() < REST_SHIFT) {
+                for i in 0..3 {
+                    // Mean of the two blocks, rounded to the nearest count.
+                    let s = self.sum[3 + i] + prev[3 + i];
+                    self.offset[i] = ((s + s.signum() * REST_SAMPLES) / (2 * REST_SAMPLES)) as i16;
+                }
+            }
+        }
+        *self = Rest { offset: self.offset, prev: if still { Some(self.sum) } else { None }, ..REST };
     }
 }
 

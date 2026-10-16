@@ -65,7 +65,9 @@ trigger → RT, grip → RB, Oculus → Guide, stick click → RS.
 
 **Gyro and touch.** In DS4 mode the dongle sends the gyro of one controller (right by default) and turns each
 thumb into a touch on its half of the DS4 touchpad. Games with built-in gyro use it directly. Anything that can
-switch gyro on with a touchpad touch, like Steam Input, can turn it into touch-to-aim.
+switch gyro on with a touchpad touch, like Steam Input, can turn it into touch-to-aim. The gyro's slight drift is
+measured and removed whenever the controllers lie still for a second, so set them down now and then (before you play
+is enough).
 
 In the control panel you choose which sensors count as your thumb (face buttons, stick and / or trigger, so a
 finger resting on the trigger can switch gyro on), how sensitive they are (touch threshold: 60 % by default, which
