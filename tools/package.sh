@@ -16,9 +16,10 @@ ELF=firmware/target/thumbv7em-none-eabihf/release/questpad
 "$OBJCOPY" -O binary "$ELF" firmware/target/questpad-nicenano.bin
 "$PY" host/uf2.py firmware/target/questpad-nicenano.bin -o firmware/target/questpad-nicenano.uf2
 
-rm -rf "dist/$NAME" && mkdir -p "dist/$NAME/host"
+rm -rf "dist/$NAME" && mkdir -p "dist/$NAME/host" "dist/$NAME/docs"
 cp firmware/target/questpad.bin firmware/target/questpad-nicenano.uf2 "dist/$NAME/"
 cp "QuestPad.pyw" "QuestPad.command" README.md LICENSE-MIT LICENSE-APACHE "dist/$NAME/"
+cp docs/motion.md docs/motion-panel.png "dist/$NAME/docs/"
 cp host/*.py host/requirements.txt "dist/$NAME/host/"
 cp -R host/vendor "dist/$NAME/host/vendor"
 find "dist/$NAME" -name __pycache__ -prune -exec rm -rf {} +
