@@ -38,7 +38,7 @@ Contributions that make QuestPad work with more controllers are very welcome. Se
 | computer | status |
 |---|---|
 | macOS | ✅ all modes tested |
-| Windows | ✅ all modes should work, generic gamepad mode tested |
+| Windows | ✅ all modes should work, generic gamepad and DS4 modes tested |
 | Linux | ❔ untested (DS4 mode uses the kernel's `hid-playstation` driver, XInput mode `xpad`) |
 
 ## What you need
