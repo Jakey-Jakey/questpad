@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuestPad 3D Controller Visualizer</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: rgba(22, 27, 34, 0.85);
+      --card-border: rgba(240, 246, 252, 0.1);
+      --text: #f0f6fc;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-glow: rgba(88, 166, 255, 0.3);
+      --green: #3fb950;
+      --green-glow: rgba(63, 185, 80, 0.3);
+      --red: #f85149;
+      --surface: #21262d;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+    }
+
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* UI Overlay */
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .controller-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      min-width: 260px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      pointer-events: auto;
+      transition: all 0.2s ease;
+    }
+
+    .card-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: rgba(248, 81, 73, 0.15);
+      color: var(--red);
+      border: 1px solid rgba(248, 81, 73, 0.3);
+      transition: all 0.3s ease;
+    }
+
+    .status-badge.connected {
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--green);
+      border-color: rgba(63, 185, 80, 0.3);
+      box-shadow: 0 0 10px var(--green-glow);
+    }
+
+    .batt-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .batt-bar {
+      width: 42px;
+      height: 8px;
+      background: var(--surface);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .batt-fill {
+      height: 100%;
+      background: var(--green);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .inputs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+
+    .gauge-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .gauge-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .gauge-bar {
+      height: 6px;
+      background: var(--surface);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .gauge-fill {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 0.05s linear;
+    }
+
+    /* Stick 2D Box */
+    .stick-box-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .stick-pad {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: #161b22;
+      border: 1px solid var(--card-border);
+      position: relative;
+    }
+
+    .stick-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 6px var(--accent-glow);
+      transition: background-color 0.1s;
+    }
+
+    .stick-dot.clicked {
+      background: var(--green);
+    }
+
+    .buttons-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .btn-chip {
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: all 0.1s ease;
+    }
+
+    .btn-chip.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+      transform: translateY(1px);
+    }
+
+    /* Center Header Info */
+    .center-info {
+      text-align: center;
+      pointer-events: auto;
+    }
+
+    .app-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+
+    .app-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .recenter-hint {
+      margin-top: 6px;
+      display: inline-block;
+      font-size: 11px;
+      background: rgba(88, 166, 255, 0.12);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      color: var(--accent);
+      padding: 3px 10px;
+      border-radius: 12px;
+    }
+
+    /* Footer Toolbar */
+    .footer-bar {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      pointer-events: auto;
+    }
+
+    .tool-btn {
+      background: var(--card-bg);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      transition: all 0.15s ease;
+    }
+
+    .tool-btn:hover {
+      background: var(--surface);
+      border-color: rgba(240, 246, 252, 0.25);
+      transform: translateY(-1px);
+    }
+
+    .tool-btn:active {
+      transform: translateY(1px);
+    }
+
+    .tool-btn.primary {
+      background: var(--accent);
+      color: #0d1117;
+      border-color: var(--accent);
+    }
+
+    .tool-btn.primary:hover {
+      background: #79b8ff;
+    }
+
+    /* Loading Overlay */
+    #loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      transition: opacity 0.5s ease;
+    }
+
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(88, 166, 255, 0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+
+  <!-- Import maps for clean ES modules via high-speed CDN -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://esm.sh/three@0.160.0",
+        "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div style="font-weight: 600; font-size: 15px;">Loading Meta Quest 3D Controller Models...</div>
+    <div style="font-size: 12px; color: var(--text-muted);" id="loading-detail">Fetching assets/meta_quest_*.glb</div>
+  </div>
+
+  <div class="ui-layer">
+    <!-- Header -->
+    <div class="header-bar">
+      <!-- Left Controller Card -->
+      <div class="controller-card" id="left-card">
+        <div class="card-title-row">
+          <div class="card-title">
+            <span>Left Touch</span>
+          </div>
+          <span class="status-badge" id="left-status">DISCONNECTED</span>
+        </div>
+        <div class="batt-wrap">
+          <span>Battery</span>
+          <div class="batt-bar"><div class="batt-fill" id="left-batt"></div></div>
+          <span id="left-batt-txt">--%</span>
+        </div>
+        <div class="stick-box-wrap">
+          <div class="stick-pad">
+            <div class="stick-dot" id="left-stick-dot"></div>
+          </div>
+          <div style="flex: 1;">
+            <div class="gauge-group">
+              <div class="gauge-label"><span>Index Trigger</span><span id="left-trig-txt">0%</span></div>
+              <div class="gauge-bar"><div class="gauge-fill" id="left-trig-fill"></div></div>
+            </div>
+            <div class="gauge-group" style="margin-top: 6px;">
+              <div class="gauge-label"><span>Grip Squeeze</span><span id="left-grip-txt">0%</span></div>
+              <div class="gauge-bar"><div class="gauge-fill" id="left-grip-fill"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="buttons-row">
+          <div class="btn-chip" id="btn-x">X</div>
+          <div class="btn-chip" id="btn-y">Y</div>
+          <div class="btn-chip" id="btn-left-stick">L3</div>
+          <div class="btn-chip" id="btn-left-menu">Menu</div>
+        </div>
+      </div>
+
+      <!-- Center Title -->
+      <div class="center-info">
+        <div class="app-title">QuestPad 3D Visualizer</div>
+        <div class="app-subtitle">Real-time 3DoF Orientation & Joint Motion</div>
+        <div class="recenter-hint">Squeeze Grip + Trigger together to Recenter</div>
+      </div>
+
+      <!-- Right Controller Card -->
+      <div class="controller-card" id="right-card">
+        <div class="card-title-row">
+          <div class="card-title">
+            <span>Right Touch</span>
+          </div>
+          <span class="status-badge" id="right-status">DISCONNECTED</span>
+        </div>
+        <div class="batt-wrap">
+          <span>Battery</span>
+          <div class="batt-bar"><div class="batt-fill" id="right-batt"></div></div>
+          <span id="right-batt-txt">--%</span>
+        </div>
+        <div class="stick-box-wrap">
+          <div class="stick-pad">
+            <div class="stick-dot" id="right-stick-dot"></div>
+          </div>
+          <div style="flex: 1;">
+            <div class="gauge-group">
+              <div class="gauge-label"><span>Index Trigger</span><span id="right-trig-txt">0%</span></div>
+              <div class="gauge-bar"><div class="gauge-fill" id="right-trig-fill"></div></div>
+            </div>
+            <div class="gauge-group" style="margin-top: 6px;">
+              <div class="gauge-label"><span>Grip Squeeze</span><span id="right-grip-txt">0%</span></div>
+              <div class="gauge-bar"><div class="gauge-fill" id="right-grip-fill"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="buttons-row">
+          <div class="btn-chip" id="btn-a">A</div>
+          <div class="btn-chip" id="btn-b">B</div>
+          <div class="btn-chip" id="btn-right-stick">R3</div>
+          <div class="btn-chip" id="btn-right-menu">Oculus</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer Controls -->
+    <div class="footer-bar">
+      <button class="tool-btn primary" id="btn-recenter">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        Recenter [C / Space]
+      </button>
+      <button class="tool-btn" id="btn-reset-cam">Reset View [Home]</button>
+      <button class="tool-btn" id="btn-demo">Toggle Demo Motion</button>
+      <button class="tool-btn" id="btn-grid">Toggle Grid</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ---- Scene Setup ----
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d1117);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 50);
+    const DEFAULT_CAM_POS = new THREE.Vector3(0, 0.35, 0.65);
+    const DEFAULT_CAM_LOOK = new THREE.Vector3(0, 0, 0);
+    camera.position.copy(DEFAULT_CAM_POS);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.copy(DEFAULT_CAM_LOOK);
+    controls.minDistance = 0.2;
+    controls.maxDistance = 3.0;
+
+    // ---- Lighting ----
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    scene.add(ambientLight);
+
+    const mainLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    mainLight.position.set(1.5, 3.0, 2.0);
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.width = 1024;
+    mainLight.shadow.mapSize.height = 1024;
+    mainLight.shadow.bias = -0.001;
+    scene.add(mainLight);
+
+    const fillLight = new THREE.DirectionalLight(0x79b8ff, 1.0);
+    fillLight.position.set(-2.0, 1.5, -1.5);
+    scene.add(fillLight);
+
+    const bottomLight = new THREE.DirectionalLight(0x30363d, 0.6);
+    bottomLight.position.set(0, -2.0, 0);
+    scene.add(bottomLight);
+
+    // Subtle Ground Grid
+    const gridHelper = new THREE.GridHelper(2.0, 20, 0x30363d, 0x161b22);
+    gridHelper.position.y = -0.22;
+    scene.add(gridHelper);
+
+    // ---- Controller Container Roots ----
+    // Left at x = -0.16, Right at x = +0.16
+    const leftRoot = new THREE.Group();
+    leftRoot.position.set(-0.16, 0.0, 0.0);
+    scene.add(leftRoot);
+
+    const rightRoot = new THREE.Group();
+    rightRoot.position.set(0.16, 0.0, 0.0);
+    scene.add(rightRoot);
+
+    // Stores base transforms of articulated nodes matching verto_visualizer.rs
+    const leftJoints = {};
+    const rightJoints = {};
+
+    function cacheAndTagJoints(model, jointsDict) {
+      model.traverse((node) => {
+        if (node.isMesh) {
+          node.castShadow = true;
+          node.receiveShadow = true;
+        }
+        const name = node.name;
+        if (
+          name === "b_button_x_06" ||
+          name === "b_button_y_03" ||
+          name === "b_button_a_06" ||
+          name === "b_button_b_03" ||
+          name === "left_b_button_oculus_01" ||
+          name === "right_b_button_oculus_01" ||
+          name === "left_b_thumbstick_05" ||
+          name === "right_b_thumbstick_05" ||
+          name === "left_b_trigger_front_02" ||
+          name === "right_b_trigger_front_02" ||
+          name === "left_b_trigger_grip_04" ||
+          name === "right_b_trigger_grip_04"
+        ) {
+          jointsDict[name] = {
+            node: node,
+            basePos: node.position.clone(),
+            baseQuat: node.quaternion.clone(),
+          };
+        }
+      });
+    }
+
+    // ---- Load GLB Assets ----
+    const loader = new GLTFLoader();
+    let loadedLeft = false, loadedRight = false;
+
+    function checkLoaded() {
+      if (loadedLeft && loadedRight) {
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) {
+          overlay.style.opacity = '0';
+          setTimeout(() => overlay.remove(), 500);
+        }
+      }
+    }
+
+    loader.load('/assets/meta_quest_left_controller.glb', (gltf) => {
+      const model = gltf.scene;
+      // Match verto_visualizer.rs: rotate 180 on Y
+      model.rotation.y = Math.PI;
+      cacheAndTagJoints(model, leftJoints);
+      leftRoot.add(model);
+      loadedLeft = true;
+      checkLoaded();
+    }, undefined, (err) => {
+      console.error("Error loading left controller GLB:", err);
+      const detail = document.getElementById('loading-detail');
+      if (detail) detail.innerText = "Failed loading left model: " + err;
+      loadedLeft = true;
+      setTimeout(checkLoaded, 2000);
+    });
+
+    loader.load('/assets/meta_quest_right_controller.glb', (gltf) => {
+      const model = gltf.scene;
+      model.rotation.y = Math.PI;
+      cacheAndTagJoints(model, rightJoints);
+      rightRoot.add(model);
+      loadedRight = true;
+      checkLoaded();
+    }, undefined, (err) => {
+      console.error("Error loading right controller GLB:", err);
+      const detail = document.getElementById('loading-detail');
+      if (detail) detail.innerText = "Failed loading right model: " + err;
+      loadedRight = true;
+      setTimeout(checkLoaded, 2000);
+    });
+
+    // ---- Input State & Live Updating ----
+    let latestState = null;
+    const targetLeftQuat = new THREE.Quaternion();
+    const targetRightQuat = new THREE.Quaternion();
+    const currentLeftQuat = new THREE.Quaternion();
+    const currentRightQuat = new THREE.Quaternion();
+
+    // Connect to Server-Sent Events (SSE)
+    const eventSource = new EventSource('/events');
+    eventSource.onopen = () => {
+      console.log("Connected to QuestPad live stream /events");
+    };
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        latestState = data;
+        updateHUD(data);
+      } catch (e) {
+        console.error("JSON parse error from /events", e);
+      }
+    };
+    eventSource.onerror = (e) => {
+      console.warn("Live stream disconnected, reconnecting...", e);
+    };
+
+    // Update HUD Cards
+    function updateHUD(data) {
+      // Left
+      const l = data.left;
+      const lBadge = document.getElementById('left-status');
+      lBadge.className = 'status-badge ' + (l.connected ? 'connected' : '');
+      lBadge.innerText = l.connected ? 'CONNECTED' : 'DISCONNECTED';
+      document.getElementById('left-batt').style.width = l.battery + '%';
+      document.getElementById('left-batt-txt').innerText = l.battery + '%';
+
+      document.getElementById('left-trig-fill').style.width = Math.round(l.trigger * 100) + '%';
+      document.getElementById('left-trig-txt').innerText = Math.round(l.trigger * 100) + '%';
+      document.getElementById('left-grip-fill').style.width = Math.round(l.grip * 100) + '%';
+      document.getElementById('left-grip-txt').innerText = Math.round(l.grip * 100) + '%';
+
+      const lStick = document.getElementById('left-stick-dot');
+      lStick.style.left = `calc(50% + ${l.stick[0] * 18}px)`;
+      lStick.style.top = `calc(50% - ${l.stick[1] * 18}px)`;
+      lStick.className = 'stick-dot ' + (l.stick_click ? 'clicked' : '');
+
+      document.getElementById('btn-x').className = 'btn-chip ' + (l.button_primary ? 'active' : '');
+      document.getElementById('btn-y').className = 'btn-chip ' + (l.button_secondary ? 'active' : '');
+      document.getElementById('btn-left-stick').className = 'btn-chip ' + (l.stick_click ? 'active' : '');
+      document.getElementById('btn-left-menu').className = 'btn-chip ' + (l.menu_or_system ? 'active' : '');
+
+      // Right
+      const r = data.right;
+      const rBadge = document.getElementById('right-status');
+      rBadge.className = 'status-badge ' + (r.connected ? 'connected' : '');
+      rBadge.innerText = r.connected ? 'CONNECTED' : 'DISCONNECTED';
+      document.getElementById('right-batt').style.width = r.battery + '%';
+      document.getElementById('right-batt-txt').innerText = r.battery + '%';
+
+      document.getElementById('right-trig-fill').style.width = Math.round(r.trigger * 100) + '%';
+      document.getElementById('right-trig-txt').innerText = Math.round(r.trigger * 100) + '%';
+      document.getElementById('right-grip-fill').style.width = Math.round(r.grip * 100) + '%';
+      document.getElementById('right-grip-txt').innerText = Math.round(r.grip * 100) + '%';
+
+      const rStick = document.getElementById('right-stick-dot');
+      rStick.style.left = `calc(50% + ${r.stick[0] * 18}px)`;
+      rStick.style.top = `calc(50% - ${r.stick[1] * 18}px)`;
+      rStick.className = 'stick-dot ' + (r.stick_click ? 'clicked' : '');
+
+      document.getElementById('btn-a').className = 'btn-chip ' + (r.button_primary ? 'active' : '');
+      document.getElementById('btn-b').className = 'btn-chip ' + (r.button_secondary ? 'active' : '');
+      document.getElementById('btn-right-stick').className = 'btn-chip ' + (r.stick_click ? 'active' : '');
+      document.getElementById('btn-right-menu').className = 'btn-chip ' + (r.menu_or_system ? 'active' : '');
+
+      // Quaternions
+      if (l.quat && l.quat.length === 4) {
+        targetLeftQuat.set(l.quat[0], l.quat[1], l.quat[2], l.quat[3]);
+      }
+      if (r.quat && r.quat.length === 4) {
+        targetRightQuat.set(r.quat[0], r.quat[1], r.quat[2], r.quat[3]);
+      }
+    }
+
+    // Animate Joints matching verto_visualizer.rs logic
+    function animateJoints(joints, state, isLeft) {
+      if (!joints || !state) return;
+
+      // Primary / Secondary Buttons
+      const primaryKey = isLeft ? "b_button_x_06" : "b_button_a_06";
+      const secondaryKey = isLeft ? "b_button_y_03" : "b_button_b_03";
+      const menuKey = isLeft ? "left_b_button_oculus_01" : "right_b_button_oculus_01";
+      const stickKey = isLeft ? "left_b_thumbstick_05" : "right_b_thumbstick_05";
+      const trigKey = isLeft ? "left_b_trigger_front_02" : "right_b_trigger_front_02";
+      const gripKey = isLeft ? "left_b_trigger_grip_04" : "right_b_trigger_grip_04";
+
+      // Buttons (offset along local Y axis)
+      if (joints[primaryKey]) {
+        const j = joints[primaryKey];
+        const offY = state.button_primary ? -0.20 : 0;
+        const offVec = new THREE.Vector3(0, offY, 0).applyQuaternion(j.baseQuat);
+        j.node.position.copy(j.basePos).add(offVec);
+      }
+      if (joints[secondaryKey]) {
+        const j = joints[secondaryKey];
+        const offY = state.button_secondary ? -0.20 : 0;
+        const offVec = new THREE.Vector3(0, offY, 0).applyQuaternion(j.baseQuat);
+        j.node.position.copy(j.basePos).add(offVec);
+      }
+      if (joints[menuKey]) {
+        const j = joints[menuKey];
+        const offY = state.menu_or_system ? -0.18 : 0;
+        const offVec = new THREE.Vector3(0, offY, 0).applyQuaternion(j.baseQuat);
+        j.node.position.copy(j.basePos).add(offVec);
+      }
+
+      // Stick (Tilt Euler XYZ + Click press)
+      if (joints[stickKey]) {
+        const j = joints[stickKey];
+        const [sx, sy] = state.stick;
+        const pressOff = state.stick_click ? -0.15 : 0;
+        const offVec = new THREE.Vector3(0, pressOff, 0).applyQuaternion(j.baseQuat);
+        j.node.position.copy(j.basePos).add(offVec);
+
+        const tiltEuler = new THREE.Euler(sy * 0.35, 0, sx * 0.35, 'XYZ');
+        const tiltQuat = new THREE.Quaternion().setFromEuler(tiltEuler);
+        j.node.quaternion.copy(j.baseQuat).multiply(tiltQuat);
+      }
+
+      // Front Trigger (rotation along X axis)
+      if (joints[trigKey]) {
+        const j = joints[trigKey];
+        const trigQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), state.trigger * 0.30);
+        j.node.quaternion.copy(j.baseQuat).multiply(trigQuat);
+      }
+
+      // Grip Squeeze (rotation along Z axis + translation along X axis)
+      if (joints[gripKey]) {
+        const j = joints[gripKey];
+        const sign = isLeft ? 1 : -1;
+        const gripQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), state.grip * 0.25 * sign);
+        const gripOff = new THREE.Vector3(state.grip * -0.15 * sign, 0, 0).applyQuaternion(j.baseQuat);
+        j.node.position.copy(j.basePos).add(gripOff);
+        j.node.quaternion.copy(j.baseQuat).multiply(gripQuat);
+      }
+    }
+
+    // ---- Render Loop ----
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Slerp orientations for ultra-smooth 60fps tracking
+      currentLeftQuat.slerp(targetLeftQuat, 0.25);
+      currentRightQuat.slerp(targetRightQuat, 0.25);
+
+      leftRoot.quaternion.copy(currentLeftQuat);
+      rightRoot.quaternion.copy(currentRightQuat);
+
+      if (latestState) {
+        animateJoints(leftJoints, latestState.left, true);
+        animateJoints(rightJoints, latestState.right, false);
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // ---- Resize Handling ----
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ---- Toolbar Actions ----
+    function triggerRecenter() {
+      fetch('/recenter', { method: 'POST' }).catch(console.error);
+    }
+
+    document.getElementById('btn-recenter').addEventListener('click', triggerRecenter);
+
+    document.getElementById('btn-reset-cam').addEventListener('click', () => {
+      camera.position.copy(DEFAULT_CAM_POS);
+      controls.target.copy(DEFAULT_CAM_LOOK);
+    });
+
+    document.getElementById('btn-demo').addEventListener('click', () => {
+      fetch('/toggle_demo', { method: 'POST' }).catch(console.error);
+    });
+
+    document.getElementById('btn-grid').addEventListener('click', () => {
+      gridHelper.visible = !gridHelper.visible;
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyC' || e.code === 'Space') {
+        triggerRecenter();
+      } else if (e.code === 'Home') {
+        camera.position.copy(DEFAULT_CAM_POS);
+        controls.target.copy(DEFAULT_CAM_LOOK);
+      }
+    });
+  </script>
+</body>
+</html>

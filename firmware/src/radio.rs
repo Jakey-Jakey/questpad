@@ -170,6 +170,9 @@ struct Dm {
     deadline: u32,
     pub tx_count: u32,
     pub rx_count: u32,
+    v2: bool,
+    v2_flags: u8,
+    pub proto: u8,
 }
 
 pub(crate) struct Engine {
@@ -196,6 +199,9 @@ static mut ENG: Engine = Engine {
         deadline: 0,
         tx_count: 0,
         rx_count: 0,
+        v2: false,
+        v2_flags: 0,
+        proto: 0,
     },
 };
 static mut RX_BUFS: [[u8; BUF_LEN]; 2] = [[0; BUF_LEN]; 2];
@@ -374,7 +380,27 @@ pub fn dm_send(hdr: u8, payload: &[u8]) -> bool {
             return false;
         }
         e.dm.seq = e.dm.seq.wrapping_add(1);
+        e.dm.v2 = false;
         e.dm.cmd[0] = hdr;
+        e.dm.cmd[1..1 + payload.len()].copy_from_slice(payload);
+        e.dm.cmd_len = 1 + payload.len();
+        e.dm.pending = true;
+        true
+    })
+}
+
+/// Queue a Protocol 2 (Quest 3) DM command; opcode is literal (not shifted), flags in byte 1 (0x10=read, 0x00=write).
+pub fn dm_send_v2(opcode: u8, flags: u8, payload: &[u8]) -> bool {
+    critical_section::with(|_| {
+        let e = eng();
+        let connected = matches!(e.mode, Mode::Dm(p) if p != DmPhase::Scan);
+        if !connected || e.dm.pending || payload.len() > 250 {
+            return false;
+        }
+        e.dm.seq = e.dm.seq.wrapping_add(1) & 0x0F;
+        e.dm.v2 = true;
+        e.dm.v2_flags = flags & 0xF0;
+        e.dm.cmd[0] = opcode;
         e.dm.cmd[1..1 + payload.len()].copy_from_slice(payload);
         e.dm.cmd_len = 1 + payload.len();
         e.dm.pending = true;
@@ -405,12 +431,16 @@ fn dm_schedule_tx(e: &mut Engine, at: u32) {
     if e.dm.pending {
         tb[0] = 1 + e.dm.cmd_len as u8;
         tb[1] = e.dm.cmd[0];
-        tb[2] = e.dm.seq;
+        tb[2] = if e.dm.v2 {
+            e.dm.v2_flags | (e.dm.seq & 0x0F)
+        } else {
+            e.dm.seq
+        };
         tb[3..2 + e.dm.cmd_len].copy_from_slice(&e.dm.cmd[1..e.dm.cmd_len]);
     } else {
         tb[0] = 2;
         tb[1] = 0;
-        tb[2] = e.dm.seq;
+        tb[2] = if e.dm.v2 { e.dm.seq & 0x0F } else { e.dm.seq };
     }
     w(PACKETPTR, addr_of!(TX_BUF) as u32);
     w(SHORTS, READY_START | END_DISABLE);
@@ -443,6 +473,8 @@ fn dm_on_end(e: &mut Engine, phase: DmPhase, t_end: u32, crc_ok: bool, buf: &[u8
             e.dm.seq = 0;
             e.dm.pending = false;
             e.dm.misses = 0;
+            e.dm.proto = p[0];
+            e.dm.v2 = p[0] == 2;
             set_addr(id0, DM_PREFIX, DM_FREQ);
             DM_LINK.signal(true);
             let _ = EVENTS.try_send(Event::DmLink { connected: true, id0, id1 });
@@ -465,7 +497,14 @@ fn dm_on_end(e: &mut Engine, phase: DmPhase, t_end: u32, crc_ok: bool, buf: &[u8
                 let len = buf[0] as usize;
                 if len >= 2 {
                     let (hdr, seq) = (buf[1], buf[2]);
-                    if e.dm.pending && seq == e.dm.seq && hdr & 1 == 0 {
+                    let matched = if e.dm.v2 {
+                        let exp_op = e.dm.cmd[0];
+                        (hdr == exp_op || hdr == (exp_op | 0x80) || (hdr & 0x80 != 0))
+                            && ((seq & 0x0F) == (e.dm.seq & 0x0F))
+                    } else {
+                        seq == e.dm.seq && hdr & 1 == 0
+                    };
+                    if e.dm.pending && matched {
                         e.dm.pending = false;
                         let mut data = heapless::Vec::new();
                         let _ = data.extend_from_slice(&buf[3..1 + len]);

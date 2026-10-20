@@ -30,7 +30,8 @@ Quest controllers work with headsets over a private 2.4 GHz radio link. QuestPad
 |---|---|---|
 | **Quest 1** Touch | ✅ working | Tested with controller firmware 1.17.2 (bootloader 1.13.0). |
 | **Quest 2** Touch | ✅ working | Pairs and works the same way as Quest 1. |
-| **Quest 3 / 3S** Touch Plus | ❔ untested | Nothing known yet. |
+| **Quest 3 / 3S** Touch Plus | ✅ working | Verified with Quest 3 Touch Plus (firmware 1.17.1). Pairs via automated X25519 ECDH in the control panel. |
+| **Quest Pro** Touch Pro | ❔ untested | Self-tracking controllers; pairing protocol untested. |
 
 Contributions that make QuestPad work with more controllers are very welcome. See
 [Supporting a new controller](#supporting-a-new-controller).
@@ -53,9 +54,9 @@ Contributions that make QuestPad work with more controllers are very welcome. Se
    `python3 host/gui.py`.
 3. **Install the firmware**: click **Install / update firmware…**, choose `questpad.bin`, then press the dongle's
    small **sideways RESET button** (the red LED pulses) and click OK. You only need the button this first time.
-4. **Pair each controller**: tap the dongle's button (or click **Pair a controller**), then hold
-   **Oculus + Y** (left) or **Oculus + B** (right) until the controller's light blinks. The dongle flashes green and
-   the controller buzzes.
+4. **Pair each controller**: tap the dongle's button (or click **Pair a controller** in the control panel), then hold
+   **Menu + Y** (left) or **Oculus + B** (right) until the controller's light blinks. The dongle flashes green and
+   the controller buzzes. Quest 3 controllers pair directly through the control panel, which performs the ECDH key exchange automatically.
 5. **Pick a mode** in the panel (**DS4** is best for Steam) and play. From now on the dongle works on its own.
 
 Click **Back up pairing…** once and keep the file somewhere safe (and private: it's your controllers' key).
@@ -173,13 +174,14 @@ tools/package.sh             # build the release zip into dist/
 | `host/dsu_client.py` | a DSU client like an emulator's: live view, `--guided` direction check, `--selftest` |
 | `host/regs.py` | read and write controller registers |
 | `host/dm.py`, `host/sniff_adv.py` | pairing-mode tools |
+| `host/q3_pair.py` | Quest 3 X25519 ECDH + AES-128-CCM pairing tool |
 | `research/` | the analysis scripts used to work out the protocol |
 
 **How it works:** the radio protocol, pairing, encryption, controller data and the dongle internals are written up
 in **[PROTOCOL.md](PROTOCOL.md)**. Ideas for the future are in [IDEAS.md](IDEAS.md). No idea if I'll get to 'em.
 
 ## Supporting a new controller
-If you have Quest 3 controllers, you can help: the steps for capturing what a controller sends, and what
+If you have Quest Pro controllers, you can help: the steps for capturing what a controller sends, and what
 to look for, are in [PROTOCOL.md → Adding another controller](PROTOCOL.md#adding-another-controller). A pull request
 with partial findings is useful too.
 

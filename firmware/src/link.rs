@@ -90,6 +90,7 @@ struct Slot {
     id: [u8; 8],
     last_frame: u32,
     right: bool,
+    is_q3: bool,
     /// Request being (re)sent in beacons until the device echoes its seq.
     pending: Option<Down>,
     /// Host-requested register access, sent after `pending`.
@@ -119,6 +120,7 @@ const EMPTY_SLOT: Slot = Slot {
     id: [0; 8],
     last_frame: 0,
     right: false,
+    is_q3: false,
     pending: None,
     custom: None,
     haptic_done: 0,
@@ -618,7 +620,8 @@ fn uplink(l: &mut Link, job: Job, mic_ok: bool) {
             let mut id = [0u8; 8];
             id.copy_from_slice(&p[2..10]);
             let dev_type = u32::from_le_bytes([p[10], p[11], p[12], p[13]]);
-            if let Some(s) = assign_slot(l, &id, dev_type & 0x1_0000 != 0) {
+            let is_q3 = (dev_type >> 24) == 0x9A;
+            if let Some(s) = assign_slot(l, &id, dev_type & 0x1_0000 != 0, is_q3) {
                 l.join = Some((id, s));
                 l.stats.joins += 1;
                 crate::gamepad::link_join(s, dev_type);
@@ -646,9 +649,21 @@ fn uplink(l: &mut Link, job: Job, mic_ok: bool) {
             l.stats.dl_ok += 1;
         }
     }
-    // [slot][tl id][0x40 | seq][log item 4][notification entries...]
-    if p.len() > 7 && p[2] & TL_NOTIFICATION != 0 {
-        crate::gamepad::link_notifications(slot, &p[7..]);
+    // [slot][tl id][0x40 | seq][optional log item 4][notification entries...]
+    if p.len() > 3 && p[2] & TL_NOTIFICATION != 0 {
+        if !s.is_q3 && is_valid_ntf(&p[3..]) {
+            s.is_q3 = true;
+        }
+        let off = if s.is_q3 {
+            3
+        } else if p.len() > 7 {
+            7
+        } else {
+            return;
+        };
+        if p.len() > off {
+            crate::gamepad::link_notifications(slot, &p[off..]);
+        }
         match crate::gamepad::power_policy(slot, l.frame) {
             crate::gamepad::PowerAction::ArmAll => {
                 for s in 1..SLOTS {
@@ -681,12 +696,22 @@ fn uplink(l: &mut Link, job: Job, mic_ok: bool) {
     let _ = EVENTS.try_send(Event::LinkData { slot, rssi, mic_ok: true, data });
 }
 
+#[inline(always)]
+fn is_valid_ntf(buf: &[u8]) -> bool {
+    if buf.len() < 2 {
+        return false;
+    }
+    let id = buf[0] & 0x1F;
+    let len = ((buf[0] >> 5) | ((buf[1] & 0x0F) << 3)) as usize;
+    (id <= 7 || id == 22) && len > 0 && 2 + len <= buf.len()
+}
+
 /// Reuse the device's slot if it is rejoining, else take the first free one (1..4).
-fn assign_slot(l: &mut Link, id: &[u8; 8], right: bool) -> Option<u8> {
+fn assign_slot(l: &mut Link, id: &[u8; 8], right: bool, is_q3: bool) -> Option<u8> {
     let s = (1..SLOTS)
         .find(|&s| l.slots[s].used && l.slots[s].id == *id)
         .or_else(|| (1..SLOTS).find(|&s| !l.slots[s].used))?;
     // A (re)joining device starts with fresh TL state and its motor off.
-    l.slots[s] = Slot { used: true, id: *id, last_frame: l.frame, right, ..EMPTY_SLOT };
+    l.slots[s] = Slot { used: true, id: *id, last_frame: l.frame, right, is_q3, ..EMPTY_SLOT };
     Some(s as u8)
 }

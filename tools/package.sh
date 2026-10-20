@@ -22,6 +22,10 @@ cp "QuestPad.pyw" "QuestPad.command" README.md LICENSE-MIT LICENSE-APACHE "dist/
 cp docs/motion.md docs/motion-panel.png "dist/$NAME/docs/"
 cp host/*.py host/requirements.txt "dist/$NAME/host/"
 cp -R host/vendor "dist/$NAME/host/vendor"
+cp -R host/web "dist/$NAME/host/web"
+if [ -d assets ]; then
+    cp -R assets "dist/$NAME/assets"
+fi
 find "dist/$NAME" -name __pycache__ -prune -exec rm -rf {} +
 rm -f "dist/$NAME/host/pairing.json"
 # zip if installed (Git Bash on Windows has none), else Python's zipfile.

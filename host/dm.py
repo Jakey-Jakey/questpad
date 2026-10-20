@@ -69,9 +69,11 @@ def main():
     if args.action == "pair":
         p = load_or_create_pairing()
         rec = struct.pack("<I", p["network_id"]) + bytes.fromhex(p["link_key"])
-        err, _ = b.dm_cmd(SET_PAIRING, rec)
+        err, resp = b.dm_cmd(SET_PAIRING, rec)
         if err:
-            raise SystemExit("controller rejected the pairing record")
+            print("Legacy pairing record rejected (likely Quest 3 / ECDH controller). Initiating Quest 3 ECDH pairing...")
+            from q3_pair import pair_q3
+            pair_q3(b, p["network_id"], bytes.fromhex(p["link_key"]))
         p["controllers"][f"{id0:08x}{id1:08x}"] = {"paired_at": time.strftime("%Y-%m-%d %H:%M:%S")}
         json.dump(p, open(PAIRING_FILE, "w"), indent=2)
         print(f"pairing written: network id {p['network_id']:#010x}")

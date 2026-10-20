@@ -54,6 +54,7 @@ const CMD_PEEK: u8 = 0x07; // addr u32
 const CMD_DM_START: u8 = 0x10; // id0 u32, id1 u32, any u8
 const CMD_DM_SEND: u8 = 0x11; // hdr u8, payload...
 const CMD_DM_STATS: u8 = 0x12;
+const CMD_DM_SEND_V2: u8 = 0x13; // opcode u8, flags u8, payload...
 const CMD_LINK_START: u8 = 0x20; // network_id u32, link_key [16], session u16
 const CMD_LINK_STATS: u8 = 0x21;
 const CMD_PAIR_STORE: u8 = 0x22; // network_id u32, link_key [16]: save to flash and (re)start the link
@@ -241,6 +242,11 @@ fn handle(cmd: &[u8], out: &mut [u8]) -> usize {
         CMD_DM_SEND if !a.is_empty() => {
             out[0] = EV_DM_SENT;
             out[1] = radio::dm_send(a[0], &a[1..]) as u8;
+            return 2;
+        }
+        CMD_DM_SEND_V2 if a.len() >= 2 => {
+            out[0] = EV_DM_SENT;
+            out[1] = radio::dm_send_v2(a[0], a[1], &a[2..]) as u8;
             return 2;
         }
         CMD_DM_STATS => {

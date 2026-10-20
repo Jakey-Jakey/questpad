@@ -1,9 +1,9 @@
 # How QuestPad works
 
-This is a guide to the Quest 1 Touch controllers' radio protocol as QuestPad implements it, and to the dongle
-firmware: enough to understand the code, debug it, or add support for another controller. Everything here was
-verified on hardware (controller firmware 1.17.2, bootloader 1.13.0). Multi-byte values are little-endian unless
-noted. Meta's internal name for the protocol is **Pulsar**.
+This is a guide to the Meta Quest Touch controllers' radio protocol (Quest 1, Quest 2, and Quest 3 Touch Plus)
+as QuestPad implements it, and to the dongle firmware: enough to understand the code, debug it, or add support
+for another controller. Everything here was verified on hardware (Quest 1 firmware 1.17.2, Quest 3 Touch Plus
+firmware 1.17.1). Multi-byte values are little-endian unless noted. Meta's internal name for the protocol is **Pulsar**.
 
 - [At a glance](#at-a-glance)
 - [Radio](#radio)
@@ -19,11 +19,11 @@ noted. Meta's internal name for the protocol is **Pulsar**.
 | | |
 |---|---|
 | Radio | Nordic proprietary 2 Mbit/s, 2404–2478 MHz, 24-bit CRC |
-| Pairing | the controller's bootloader accepts a network id + 128-bit key over a separate "device management" link |
+| Pairing | Quest 1/2: plaintext DM write; Quest 3: X25519 ECDH key exchange + AES-128-CCM encrypted record |
 | Link timing | 2 ms frames: one beacon from the host, then up to five controller time slots |
 | Hopping | 37 channels, BLE channel-selection algorithm #1, hop size from the network id |
 | Security | controller → host packets are AES-CCM encrypted with the pairing key; beacons are plaintext |
-| Controller data | a 4-byte debug-log chunk plus tagged entries: buttons, stick, trigger/grip, touch, IMU, battery |
+| Controller data | Quest 1/2: 4-byte debug-log chunk + tagged entries; Quest 3: direct tagged entries (buttons, stick, trigger/grip, touch, IMU, battery) |
 | Commands | register reads / writes carried in beacons: vibration, power off, standby, … |
 
 ## Radio
@@ -46,7 +46,7 @@ Holding **Oculus + Y** (left) or **Oculus + B** (right) starts the controller's 
 | bytes | content |
 |---|---|
 | 0 | format version (2) |
-| 1..5 | type: `0x13001101` left, `0x13011101` right (bit 16 = hand) |
+| 1..5 | type: `0x11001101` (Q1 L), `0x11011101` (Q1 R), `0x13001101` (Q2 L), `0x13011101` (Q2 R), `0x9a001701` (Q3 L), `0x9a011701` (Q3 R). Bit 16 = hand (0 = left, 1 = right) |
 | 5..9, 9..13 | `id0`, `id1` |
 | 13..17 | unknown |
 | 17..31 | serial number, 14 ASCII characters |
@@ -63,13 +63,26 @@ of the reply header marks an error. Empty polls `[2][0][seq]` keep the link aliv
 | `0x03` read | serial number |
 | `0x24` / `0x25` read | app / bootloader version |
 | `0x2F` read | battery |
-| `0x14` write | **pairing record**: `network_id u32`, `link_key[16]` |
+| `0x14` write | **Quest 1 / Quest 2 pairing record**: `network_id u32`, `link_key[16]` (plaintext) |
+| `0x12` read | **Quest 3 ECDH public key exchange**: host sends 32-byte X25519 public key, controller returns its 32-byte public key |
+| `0x11` / `0x1D` write | **Quest 3 encrypted pairing record**: 8-byte IV + 20-byte AES-128-CCM ciphertext (`network_id` + `link_key`) + 4-byte MAC tag (`0x1D` fallback) |
 | `0x15` write | reset into the main app |
 
-Quest 1 controllers take the pairing record in plaintext; newer controllers appear to use a key-exchange based
-pairing instead. QuestPad generates a random network id (one that makes a good radio address: plenty of bit
-transitions, no long runs of equal bits) and a random 128-bit key, writes them to each controller, and keeps them in
-the dongle's flash.
+### Quest 3 ECDH pairing procedure
+Quest 1 and Quest 2 controllers accept the 20-byte pairing record in plaintext over command `0x14`. Quest 3 Touch Plus controllers reject command `0x14` and require an ephemeral X25519 ECDH key exchange:
+
+1. **Key exchange (`cmd 0x12`, read=True):** The host generates an ephemeral X25519 private key and public key. It sends `0x12` with its 32-byte public key in the payload. The controller replies with its own 32-byte X25519 public key.
+2. **Shared secret derivation:** The host computes `shared_secret = X25519(host_priv, ctrl_pub)` (32 bytes). The first 16 bytes become the AES-128 key: `aes_key = shared_secret[0..16]`.
+3. **AES-128-CCM encryption:**
+   - **Plaintext (20 B):** `[network_id u32][link_key 16B]`.
+   - **Nonce (13 B):** 5 zero bytes followed by an 8-byte random IV: `[00 00 00 00 00][iv_8]`.
+   - **Tag length:** 4 bytes.
+   - **AAD:** `b"\x00"` (matching the Nordic S0 header byte). If rejected, retry with empty AAD (`b""`).
+   - **Payload (32 B):** `[iv_8 8B][ciphertext 20B][tag 4B]`.
+4. **Writing encrypted record (`cmd 0x11`, read=False):** The host writes the 32-byte payload via command `0x11`. The controller verifies the tag, decrypts the record, and stores `network_id` and `link_key` into flash. If command `0x11` fails or is rejected, retry sending the same 32-byte payload using command `0x1D`.
+5. **Reboot (`cmd 0x15`, read=False):** The host sends command `0x15` (`RESET`) so the controller exits DM/pairing mode and reboots into its operational Pulsar firmware.
+
+QuestPad generates a random network id (one that makes a good radio address: plenty of bit transitions, no long runs of equal bits) and a random 128-bit key, writes them to each controller, and keeps them in the dongle's flash.
 
 ## The main link
 The dongle plays the headset's role. Time is divided into **2000 µs frames**:
@@ -112,28 +125,36 @@ timestamp (48 bits) and the session id (16 bits). The nRF CCM decrypts at roughl
 full packet), so the firmware queues packets and finishes them in the CCM interrupt rather than waiting.
 
 ## Controller data
-Each decrypted controller packet looks like:
+Decrypted controller uplink packets differ between hardware generations:
 
+**Quest 1 / Quest 2:**
 ```
-[slot] [0x01] [0x40 | seq] [log chunk, 4 B] [entry] [entry] ...
+[slot] [tl id] [0x40 | seq] [log chunk, 4 B] [entry] [entry] ...
 ```
-
 The 4-byte log chunk carries the controller's own text debug log a few characters at a time (`host/link.py --log`
-prints it). It only advances when the host acks the packet.
+prints it). It only advances when the host acks the packet. Tagged notification entries start at offset 7.
+
+**Quest 3 (Touch Plus):**
+```
+[slot] [tl id] [0x40 | seq] [entry] [entry] ...
+```
+Quest 3 Touch Plus controllers do not tunnel a 4-byte log chunk; tagged notification entries begin immediately at offset 3.
 
 Each **entry** is `[id:5 | len_lo:3 << 5] [len_hi:4 | seq:3 << 4 | last << 7] [data]`:
 
 | id | content |
 |---|---|
-| 0 | battery % |
+| 0 | battery % (1 B) |
 | 1 | IMU, 18 B: timestamp (48-bit µs), accel x y z (i16, 1024 per g), gyro x y z (i16, 8.192 per °/s); every 2 ms |
 | 2 | thumbstick x, y (i16; +x right, +y up; exactly 0, 0 at rest, already calibrated) |
 | 3 | trigger, grip: two 12-bit values packed in 3 bytes, inverted (4095 = released, 0 = fully squeezed) |
-| 4 | buttons: bit 0 X / A, bit 1 Y / B, bit 2 stick click, bit 3 Menu / Oculus (bit 4 is always set) |
-| 5 | capacitive touch: 0x01 X / A, 0x02 Y / B, 0x04 stick, 0x08 trigger (finger on it); 0x10 / 0x20 / 0x40 / 0x80 = finger near the same four |
+| 4 | buttons (1 B): bit 0 X / A, bit 1 Y / B, bit 2 stick click, bit 3 Menu / Oculus (on Quest 1/2 bit 4 is always 1; on Quest 3 bit 4 is 0 when idle) |
+| 5 | capacitive touch (1 B): 0x01 X / A, 0x02 Y / B, 0x04 stick, 0x08 trigger (finger on it); 0x10 / 0x20 / 0x40 / 0x80 = finger near the same four |
 | 5 thresholds | the controller sets touch above 25 / 20 / 45 / 100 and near above 18 / 15 / 25 / 50 (X / A, Y / B, stick, trigger) on the raw levels in id 7 |
 | 6 | status flags, sent when the controller changes state: 0x01 dead battery (it shuts down right after), 0x10 standby (register 0x06) |
 | 7 | raw touch levels, 4 × u8 (X / A, Y / B, stick, trigger), clamped to 0..255; ~0 untouched, ~200 for a finger on the trigger, 30..60 hovering |
+| 8, 9, 11 | Quest 3 telemetry: ID 8 (10 B), ID 9 (4 B), ID 11 (12 B) tracking/power telemetry |
+| 21, 22, 23 | Quest 3 status: ID 21 (2 B), ID 22 (2 B), ID 23 (8 B power/charging) |
 
 **IMU orientation** (right controller, held naturally): −Z points up and −Y points forward, so for a DS4-style frame
 (x right, y up, z toward you) DS4 x = +X, y = −Z, z = +Y. The IMU is a TDK ICM-20601 (register `0x31`); its gyro uses
@@ -185,8 +206,8 @@ Nordic's Open USB DFU bootloader. The `nicenano` cargo feature builds for the ni
 
 | | |
 |---|---|
-| `link.rs` | the main-link host: frame timing, hopping, joins, decryption queue, requests |
-| `radio.rs` | radio driver and the pairing-mode (DM) engine |
+| `link.rs` | the main-link host: frame timing, hopping, joins, decryption queue, requests, dynamic notification offset (Q1/Q2 offset 7 vs Q3 offset 3) |
+| `radio.rs` | radio driver and the pairing-mode (DM) engine (supports Protocol 1 legacy DM and Protocol 2 Quest 3 DM via `CMD_DM_SEND_V2`) |
 | `gamepad.rs` | controller data → one pad state; HID mode report; power-off and mode gestures, idle timer |
 | `ds4.rs`, `xinput.rs` | DS4 and Xbox 360 modes (descriptor / layout from GP2040-CE) |
 | `ui.rs` | status LED, button, pairing from the dongle |

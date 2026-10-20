@@ -22,7 +22,9 @@ try:
 except ImportError:
     sys.path.insert(0, os.path.join(HERE, "vendor"))
 
+import dm  # noqa: E402
 import dsu  # noqa: E402
+import visualizer  # noqa: E402
 from bridge import Bridge  # noqa: E402
 from mapping import LOG_ITEM_LEN, Hand  # noqa: E402
 
@@ -51,7 +53,7 @@ PAIR_TEXT = {
     "idle": "",
     "waiting": "Waiting: hold Oculus + Y (left) or Oculus + B (right) until the controller's LED blinks.",
     "writing": "Pairing...",
-    "done": "Paired! The controller is connecting.",
+    "done": "Paired successfully! Controller is connected and active.",
     "failed": "Pairing failed. Try again.",
     "timed out": "No controller found in pairing mode. Try again.",
     "cancelled": "Pairing cancelled.",
@@ -67,21 +69,42 @@ class Worker(threading.Thread):
         self.cmds = queue.Queue()
         self.bridge = None
         self.paused = False
-        self.tap = None  # sees every frame from the dongle, on this thread (the motion server's feed)
+        self.taps = set()
+        self.tap = self._dispatch_tap  # sees every frame from the dongle
 
     def call(self, fn, done=None, fail=None):
         """Run fn(bridge) on the worker; done(result) / fail(error) run on the GUI thread."""
         self.cmds.put((fn, done, fail))
 
-    def set_tap(self, fn):
-        self.tap = fn
+    def _dispatch_tap(self, frame):
+        for fn in list(self.taps):
+            try:
+                fn(frame)
+            except Exception:
+                pass
+
+    def add_tap(self, fn):
+        if fn:
+            self.taps.add(fn)
         if self.bridge:
-            self.bridge.tap = fn
+            self.bridge.tap = self._dispatch_tap
+
+    def remove_tap(self, fn):
+        self.taps.discard(fn)
+        if self.bridge:
+            self.bridge.tap = self._dispatch_tap if self.taps else None
+
+    def set_tap(self, fn):
+        self.taps.clear()
+        if fn:
+            self.taps.add(fn)
+        if self.bridge:
+            self.bridge.tap = self._dispatch_tap if self.taps else None
 
     def _connect(self):
         try:
             self.bridge = Bridge()
-            self.bridge.tap = self.tap
+            self.bridge.tap = self._dispatch_tap if self.taps else None
             self.events.put(("connected", self.bridge.ping()[1]))
         except (SystemExit, Exception):
             self.bridge = None
@@ -150,10 +173,14 @@ class App:
         self.events = queue.Queue()
         self.worker = Worker(self.events)
         self.hands = {}  # slot -> (side, Hand)
+        self.is_q3 = {}  # slot -> bool
+        self._pairing_active = False
+        self._firmware_pairing_active = False
         self.settings = None
         self.connected = False
         self.version = ""
         self.motion = None  # dsu.Server while motion for emulators is on
+        self.visualizer = None  # visualizer.VisualizerServer for 3D controller visualization
         self._build()
         if demo:
             self._demo()
@@ -206,8 +233,10 @@ class App:
             ttk.Label(ctl, textvariable=inputs, font=("TkFixedFont", 10), width=34).grid(row=i, column=3, sticky="w")
             ttk.Button(ctl, text="Buzz", width=6, command=lambda s=side: self._buzz(s)).grid(row=i, column=4)
             self.ctl_rows[side] = (state, batt, inputs)
-        ttk.Button(ctl, text="Turn off controllers", command=self._power_off).grid(row=2, column=0, columnspan=3,
+        ttk.Button(ctl, text="Turn off controllers", command=self._power_off).grid(row=2, column=0, columnspan=2,
                                                                                   sticky="w", pady=(6, 0))
+        ttk.Button(ctl, text="Visualize 3D...", command=self._visualize_controllers).grid(row=2, column=2, columnspan=2,
+                                                                                          sticky="w", pady=(6, 0))
 
         # Pairing
         pr = ttk.LabelFrame(main, text="Pairing", padding=6)
@@ -334,6 +363,9 @@ class App:
         fn, value = data
         fn(value)
 
+    def _on_pair_progress(self, ps):
+        self.pair_var.set(PAIR_TEXT.get(ps, ps))
+
     def _on_status(self, st):
         mode = st["mode"]
         paired = "paired" if st["paired"] else "not paired yet"
@@ -359,28 +391,63 @@ class App:
                 inputs.set("")
         live = {slot for slot, _, _ in st["controllers"]}
         self.hands = {s: h for s, h in self.hands.items() if s in live}
-        ps = st["pair_state"]
-        if ps in ("waiting", "writing"):
-            self.pair_var.set(PAIR_TEXT[ps])
-            self.pair_btn.config(text="Cancel pairing")
-        else:
-            self.pair_btn.config(text="Pair a controller")
+        self.is_q3 = {s: q for s, q in self.is_q3.items() if s in live}
+        if self.visualizer:
+            for slot, side, battery in st["controllers"]:
+                self.visualizer.set_controller_slot(slot, side, battery)
+        if not getattr(self, "_pairing_active", False):
+            ps = st["pair_state"]
+            if ps in ("waiting", "writing"):
+                self.pair_var.set(PAIR_TEXT[ps])
+                self.pair_btn.config(text="Cancel pairing")
+                self._firmware_pairing_active = True
+            else:
+                self.pair_btn.config(text="Pair a controller")
+                self._firmware_pairing_active = False
         self._show_motion()
 
+    @staticmethod
+    def is_valid_ntf(buf):
+        if len(buf) < 2:
+            return False
+        nid = buf[0] & 0x1F
+        length = (buf[0] >> 5) | ((buf[1] & 0x0F) << 3)
+        return (nid <= 7 or nid == 22) and length > 0 and 2 + length <= len(buf)
+
+
     def _on_frame(self, f):
-        if f[0] == 0xA7:  # pairing progress
+        if f[0] == 0xA7 and not getattr(self, "_pairing_active", False):  # pairing progress
             ps = Bridge.PAIR_STATES[f[1]] if f[1] < len(Bridge.PAIR_STATES) else ""
             self.pair_var.set(PAIR_TEXT.get(ps, ps))
+            self._firmware_pairing_active = ps in ("waiting", "writing")
+            if self._firmware_pairing_active:
+                self.pair_btn.config(text="Cancel pairing")
+            else:
+                self.pair_btn.config(text="Pair a controller")
+        elif f[0] == 0xA0:
+            slot = f[1]
+            dev_type = struct.unpack_from("<I", f, 10)[0]
+            side = "right" if dev_type & 0x1_0000 != 0 else "left"
+            if slot not in self.hands or self.hands[slot][0] != side:
+                self.hands[slot] = (side, Hand())
+            self.is_q3[slot] = (dev_type >> 24) == 0x9A
         elif f[0] == 0xA1 and f[3] and f[1] in self.hands:
             p = f[4:]
-            if len(p) > 3 + LOG_ITEM_LEN and p[2] & 0x40:
+            if len(p) > 3 and p[2] & 0x40:
                 side, h = self.hands[f[1]]
-                h.update(p[3 + LOG_ITEM_LEN:])
+                if f[1] in self.is_q3:
+                    off = 3 if self.is_q3[f[1]] else 7
+                else:
+                    off = 3 if self.is_valid_ntf(p[3:]) else 7
+                h.update(p[off:])
                 names = "ABS*" if side == "right" else "XYS*"
                 btn = "".join(n if h.buttons >> i & 1 else "." for i, n in enumerate(names))
                 self.ctl_rows[side][2].set(
                     f"{btn} stick {h.stick[0] // 330:+4d},{h.stick[1] // 330:+4d}  "
                     f"trig {h.trigger * 100 // 4095:3d}  grip {h.grip * 100 // 4095:3d}")
+                if h.battery and self.ctl_rows[side][1]["value"] != h.battery:
+                    self.ctl_rows[side][1]["value"] = h.battery
+                    self.ctl_rows[side][0].set(f"connected ({h.battery}%)")
 
     # ---- actions ----
 
@@ -405,9 +472,126 @@ class App:
             self.worker.call(lambda b: b.send(b"\x28"))
 
     def _pair(self):
-        if self._need():
-            self.pair_var.set(PAIR_TEXT["waiting"])
+        if not self._need():
+            return
+        if getattr(self, "_pairing_active", False):
+            self._cancel_pairing = True
+            self._pairing_active = False
+            self.pair_btn.config(text="Pair a controller")
+            self.pair_var.set(PAIR_TEXT["cancelled"])
+            self.worker.call(lambda b: b.link_resume())
+            return
+        if getattr(self, "_firmware_pairing_active", False):
+            self._firmware_pairing_active = False
+            self.pair_btn.config(text="Pair a controller")
+            self.pair_var.set(PAIR_TEXT["cancelled"])
             self.worker.call(lambda b: b.pair_start())
+            return
+
+        self._pairing_active = True
+        self._cancel_pairing = False
+        self.pair_var.set(PAIR_TEXT["waiting"])
+        self.pair_btn.config(text="Cancel pairing")
+
+        def run_pair(b):
+            p = b.pair_export()
+            if p:
+                net_id, link_key = p[0], bytes.fromhex(p[1])
+            else:
+                pairing_file = os.path.join(HERE, "pairing.json")
+                if os.path.exists(pairing_file):
+                    try:
+                        pj = json.load(open(pairing_file))
+                        net_id = int(pj["network_id"])
+                        link_key = bytes.fromhex(pj["link_key"])
+                    except Exception:
+                        net_id = dm.good_network_id()
+                        link_key = os.urandom(16)
+                else:
+                    net_id = dm.good_network_id()
+                    link_key = os.urandom(16)
+
+            b.dm_start(any_device=True)
+            t_start = time.time()
+            connected = False
+            id0, id1 = 0, 0
+            while time.time() - t_start < 30.0:
+                if getattr(self, "_cancel_pairing", False):
+                    b.link_resume()
+                    return "cancelled"
+                for f in b.frames(0.1):
+                    if f[0] == 0x90:
+                        c, id0, id1 = struct.unpack_from("<BII", f, 1)
+                        if c:
+                            connected = True
+                            break
+                if connected:
+                    break
+
+            if not connected:
+                b.link_resume()
+                return "timed out"
+
+            if getattr(self, "_cancel_pairing", False):
+                b.link_resume()
+                return "cancelled"
+
+            self.events.put(("pair_progress", "writing"))
+            time.sleep(0.05)
+
+            rec = struct.pack("<I", net_id) + link_key
+            err = True
+            try:
+                err, _ = b.dm_cmd(0x14, rec, timeout=2.0)
+            except Exception:
+                err = True
+
+            if err:
+                try:
+                    from q3_pair import pair_q3
+                    pair_q3(b, net_id, link_key)
+                except Exception as e:
+                    print("Pairing error:", e)
+                    b.link_resume()
+                    return "failed"
+
+            pairing_file = os.path.join(HERE, "pairing.json")
+            try:
+                pj = json.load(open(pairing_file)) if os.path.exists(pairing_file) else {"controllers": {}}
+                pj["network_id"] = net_id
+                pj["link_key"] = link_key.hex()
+                pj.setdefault("controllers", {})[f"{id0:08x}{id1:08x}"] = {"paired_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+                json.dump(pj, open(pairing_file, "w"), indent=2)
+            except Exception:
+                pass
+
+            try:
+                # Command 0x15: reset controller out of pairing/DM mode into its main app
+                b.dm_cmd(0x15, b"", timeout=0.5)
+            except Exception:
+                pass
+            try:
+                b.dm_cmd_v2(0x15, b"", timeout=0.5)
+            except Exception:
+                pass
+            time.sleep(0.3)
+
+            b.pair_store(net_id, link_key)
+            b.link_resume()
+            return "done"
+
+        def on_done(res):
+            self._pairing_active = False
+            self.pair_btn.config(text="Pair a controller")
+            self.pair_var.set(PAIR_TEXT.get(res, res))
+
+        def on_fail(err):
+            self._pairing_active = False
+            self.pair_btn.config(text="Pair a controller")
+            self.pair_var.set(PAIR_TEXT["failed"])
+            print("Pairing exception:", err)
+
+        self.worker.call(run_pair, on_done, on_fail)
 
     def _backup(self):
         if not self._need():
@@ -495,9 +679,9 @@ class App:
                 return
             if self.settings:
                 self.motion.settings = self.settings
-            self.worker.set_tap(self.motion.feed)
+            self.worker.add_tap(self.motion.feed)
         elif not self.motion_var.get() and self.motion:
-            self.worker.set_tap(None)
+            self.worker.remove_tap(self.motion.feed)
             self.motion.close()
             self.motion = None
         if remember:
@@ -513,9 +697,26 @@ class App:
         self.motion_status.set(where + (self.motion.describe() if self.connected else
                                         "waiting for the dongle (HID or DS4 mode)"))
 
+    def _visualize_controllers(self):
+        import webbrowser
+        if not self.visualizer:
+            try:
+                self.visualizer = visualizer.VisualizerServer()
+                self.worker.add_tap(self.visualizer.feed)
+            except Exception as e:
+                messagebox.showerror("QuestPad", f"Could not start 3D visualizer server:\n{e}")
+                return
+        for slot, item in self.hands.items():
+            side = item[0]
+            batt = self.ctl_rows[side][1]["value"] if side in self.ctl_rows else None
+            self.visualizer.set_controller_slot(slot, side, batt)
+        webbrowser.open(self.visualizer.url)
+
     def _quit(self):
         if self.motion:
             self.motion.close()  # emulators see the controllers leave, and ask again next time
+        if self.visualizer:
+            self.visualizer.close()
         self.root.destroy()
 
     def _show_settings(self, s):

@@ -184,6 +184,21 @@ class Bridge:
                 raise RuntimeError("DM link lost")
         raise TimeoutError(f"no response to DM command {cmd_id:#x} (accepted={accepted})")
 
+    def dm_cmd_v2(self, opcode, payload=b"", flags=0x10, timeout=2.0):
+        """Send Protocol 2 (Quest 3) DM command; returns (error_flag, response_payload)."""
+        self.send(bytes([0x13, opcode, flags]) + payload)
+        accepted = None
+        for f in self.frames(timeout):
+            if f[0] == 0x93:
+                accepted = f[1]
+                if not accepted:
+                    raise RuntimeError("dongle rejected DM command (not connected or busy)")
+            elif f[0] == 0x91:
+                return bool(f[1] & 0x80), f[3:]
+            elif f[0] == 0x90 and not f[1]:
+                raise RuntimeError("DM link lost")
+        raise TimeoutError(f"no response to DM command v2 {opcode:#x} (accepted={accepted})")
+
     def dm_wait_link(self, timeout=None):
         for f in self.frames(timeout):
             if f[0] == 0x90:
